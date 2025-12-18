@@ -31,12 +31,9 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.options) setOptions(parsed.options);
+        // We do not restore the image itself to avoid quota issues, 
+        // but we can restore the last result text if needed.
         if (parsed.result) setResult(parsed.result);
-        if (parsed.error) setError(parsed.error);
-        if (parsed.image) {
-          setImage(parsed.image);
-          console.log("SmartMail: Restored previous session state.");
-        }
       }
     } catch (e) {
       console.warn("Failed to load saved scanner state:", e);
@@ -45,20 +42,20 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
   // Save state on change
   useEffect(() => {
-    if (!image && !error) return; 
-
     try {
+      // FIX: Do NOT save 'image' or 'processedImage' to localStorage.
+      // Base64 images are too large (~2MB+) and exceed the 5MB quota immediately.
       const stateToSave = {
-        image,
         result,
         options,
-        error
+        // error // Don't persist errors
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
     } catch (e) {
-      console.warn("Failed to auto-save scanner state (quota exceeded?):", e);
+      // This catch block should be less frequent now
+      console.warn("Failed to auto-save scanner state:", e);
     }
-  }, [image, result, options, error]);
+  }, [result, options]); // Removed 'image' and 'error' from dependencies
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);

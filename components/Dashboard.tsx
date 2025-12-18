@@ -4,7 +4,7 @@ import {
   LineChart, Line 
 } from 'recharts';
 import { ScanResult } from '../types';
-import NetworkViz from './NetworkViz';
+import MapViz from './MapViz';
 import { Activity, Package, MapPin, AlertCircle } from 'lucide-react';
 
 interface DashboardProps {
@@ -60,14 +60,17 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
           </div>
         </div>
 
-        {/* Sorting Network Viz */}
+        {/* Map Visualization */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Network Load</h3>
-          <div className="flex-1 min-h-[250px] relative">
-            <NetworkViz />
-            <div className="absolute bottom-2 left-2 text-xs text-slate-400 bg-white/80 p-1 rounded">
-              D3.js Force Simulation
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-800">Live Tracking Map</h3>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span className="text-xs text-slate-500 uppercase font-medium">Live</span>
             </div>
+          </div>
+          <div className="flex-1 min-h-[300px] relative">
+            <MapViz />
           </div>
         </div>
       </div>
