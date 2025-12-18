@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { ScanResult } from '../types';
 import MapViz from './MapViz';
-import { Activity, Package, MapPin, AlertCircle } from 'lucide-react';
+import { Activity, Package, MapPin, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface DashboardProps {
   history: ScanResult[];
@@ -18,106 +18,170 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
     ? Math.round(history.reduce((acc, curr) => acc + (curr.data?.confidence || 0), 0) / history.length) 
     : 0;
   
-  const scansLastHour = history.filter(h => Date.now() - h.timestamp < 3600000).length;
+  // Mock trend calculation
+  const isPositiveTrend = avgConfidence > 80;
 
   // Mock data for charts if empty history
   const chartData = history.length > 0 
     ? history.slice(-10).map((h, i) => ({ name: `Scan ${i+1}`, confidence: h.data?.confidence || 0 }))
     : [
-      { name: '10:00', confidence: 85 },
-      { name: '10:15', confidence: 92 },
-      { name: '10:30', confidence: 78 },
-      { name: '10:45', confidence: 95 },
-      { name: '11:00', confidence: 88 },
+      { name: '09:00', confidence: 85 },
+      { name: '10:00', confidence: 92 },
+      { name: '11:00', confidence: 78 },
+      { name: '12:00', confidence: 95 },
+      { name: '13:00', confidence: 88 },
+      { name: '14:00', confidence: 94 },
     ];
 
   return (
-    <div className="space-y-6">
-      {/* Top Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={<Package className="text-blue-600" />} label="Total Scanned" value={totalScans.toString()} subtext="+12% from yesterday" />
-        <StatCard icon={<Activity className="text-emerald-600" />} label="Avg Accuracy" value={`${avgConfidence}%`} subtext="Based on confidence score" />
-        <StatCard icon={<MapPin className="text-indigo-600" />} label="Active Centers" value="14" subtext="Across 3 regions" />
-        <StatCard icon={<AlertCircle className="text-amber-600" />} label="Flagged Items" value={history.filter(h => (h.data?.confidence || 100) < 70).length.toString()} subtext="Requires manual review" />
+    <div className="space-y-8">
+      {/* Top Stats Cards with Gradients */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard 
+          icon={<Package className="w-6 h-6 text-white" />} 
+          gradient="bg-gradient-to-br from-blue-500 to-blue-600"
+          shadow="shadow-blue-200"
+          label="Total Scanned" 
+          value={totalScans.toString()} 
+          trend="+12%"
+          trendUp={true}
+        />
+        <StatCard 
+          icon={<Activity className="w-6 h-6 text-white" />} 
+          gradient="bg-gradient-to-br from-emerald-500 to-emerald-600"
+          shadow="shadow-emerald-200"
+          label="Avg Accuracy" 
+          value={`${avgConfidence}%`} 
+          trend={isPositiveTrend ? "+2.4%" : "-1.1%"}
+          trendUp={isPositiveTrend}
+        />
+        <StatCard 
+          icon={<MapPin className="w-6 h-6 text-white" />} 
+          gradient="bg-gradient-to-br from-purple-500 to-purple-600"
+          shadow="shadow-purple-200"
+          label="Active Centers" 
+          value="14" 
+          subtext="Operational"
+        />
+        <StatCard 
+          icon={<AlertCircle className="w-6 h-6 text-white" />} 
+          gradient="bg-gradient-to-br from-amber-500 to-orange-500"
+          shadow="shadow-orange-200"
+          label="Flagged Items" 
+          value={history.filter(h => (h.data?.confidence || 100) < 70).length.toString()} 
+          subtext="Requires Review"
+          alert={true}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6">OCR Confidence Trend</h3>
-          <div className="w-full h-[300px]">
+        <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-xl font-bold text-slate-800">OCR Confidence Trend</h3>
+              <p className="text-sm text-slate-500">Real-time accuracy metrics</p>
+            </div>
+            <select className="text-sm border-slate-200 rounded-xl px-3 py-2 text-slate-500 focus:ring-blue-500 bg-slate-50">
+              <option>Last 24 Hours</option>
+              <option>Last 7 Days</option>
+            </select>
+          </div>
+          <div className="w-full h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} tickLine={false} domain={[0, 100]} />
+                <defs>
+                  <linearGradient id="colorConfidence" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} dx={-10} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
                 />
-                <Line type="monotone" dataKey="confidence" stroke="#3b82f6" strokeWidth={3} dot={{ fill: '#3b82f6', r: 4 }} activeDot={{ r: 6 }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="confidence" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={4} 
+                  dot={{ fill: '#fff', stroke: '#8b5cf6', strokeWidth: 3, r: 5 }} 
+                  activeDot={{ r: 7, fill: '#7c3aed', stroke: '#fff', strokeWidth: 3 }} 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Map Visualization */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-800">Live Tracking Map</h3>
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              <span className="text-xs text-slate-500 uppercase font-medium">Live</span>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+               <h3 className="text-xl font-bold text-slate-800">Geo Tracking</h3>
+               <p className="text-sm text-slate-500">Live Map</p>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 shadow-sm">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              <span className="text-xs text-emerald-700 font-bold uppercase tracking-wide">Live</span>
             </div>
           </div>
-          <div className="flex-1 min-h-[300px] relative">
+          <div className="flex-1 min-h-[300px] relative rounded-2xl overflow-hidden border border-slate-100 shadow-inner">
             <MapViz />
           </div>
         </div>
       </div>
 
       {/* Recent Activity Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800">Recent Scans</h3>
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300">
+        <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">Recent Scans</h3>
+            <p className="text-sm text-slate-500">Latest processed envelopes</p>
+          </div>
+          <button className="text-sm text-indigo-600 font-bold hover:text-indigo-700 hover:underline px-4 py-2 bg-indigo-50 rounded-lg transition-colors">View All</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+            <thead className="text-xs text-slate-400 uppercase bg-slate-50">
               <tr>
-                <th className="px-6 py-3">Timestamp</th>
-                <th className="px-6 py-3">Recipient</th>
-                <th className="px-6 py-3">PIN/ZIP</th>
-                <th className="px-6 py-3">Sorting Center</th>
-                <th className="px-6 py-3">Status</th>
+                <th className="px-8 py-4 font-bold">Timestamp</th>
+                <th className="px-8 py-4 font-bold">Recipient</th>
+                <th className="px-8 py-4 font-bold">PIN/ZIP</th>
+                <th className="px-8 py-4 font-bold">Sorting Center</th>
+                <th className="px-8 py-4 font-bold">Status</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-50">
               {history.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                    No scans yet. Go to Scanner to start.
+                  <td colSpan={5} className="px-8 py-12 text-center text-slate-400">
+                    No recent activity found.
                   </td>
                 </tr>
               ) : (
                 history.slice().reverse().slice(0, 5).map((scan) => (
-                  <tr key={scan.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-6 py-4 font-medium text-slate-900">
-                      {new Date(scan.timestamp).toLocaleTimeString()}
+                  <tr key={scan.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-8 py-4">
+                      <div className="font-bold text-slate-800">{new Date(scan.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                      <div className="text-xs text-slate-400 font-medium">{new Date(scan.timestamp).toLocaleDateString()}</div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{scan.data?.recipient || 'Unknown'}</td>
-                    <td className="px-6 py-4 font-mono text-slate-600">{scan.data?.pin_code}</td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <td className="px-8 py-4 font-medium text-slate-700">{scan.data?.recipient || 'Unknown'}</td>
+                    <td className="px-8 py-4 font-mono text-slate-600 bg-slate-100/80 px-2 py-1 rounded-lg inline-block text-xs font-bold">{scan.data?.pin_code}</td>
+                    <td className="px-8 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
                         {scan.data?.sorting_center_id}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-8 py-4">
                       {(scan.data?.confidence || 0) > 80 ? (
-                        <span className="text-emerald-600 font-medium flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Verified
                         </span>
                       ) : (
-                        <span className="text-amber-600 font-medium flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Review
                         </span>
                       )}
@@ -133,17 +197,30 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
   );
 };
 
-const StatCard = ({ icon, label, value, subtext }: { icon: React.ReactNode, label: string, value: string, subtext: string }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-    <div className="flex items-center justify-between mb-4">
-      <div className="p-2 bg-slate-50 rounded-lg">{icon}</div>
-      <span className="text-xs font-medium text-slate-400 uppercase">Last 24h</span>
+const StatCard = ({ icon, gradient, shadow, label, value, subtext, trend, trendUp, alert }: { 
+  icon: React.ReactNode, gradient: string, shadow: string, label: string, value: string, subtext?: string, trend?: string, trendUp?: boolean, alert?: boolean 
+}) => (
+  <div className={`bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover-card relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300`}>
+    <div className="flex items-start justify-between mb-4 relative z-10">
+      <div className={`p-3.5 rounded-2xl shadow-lg ${shadow} ${gradient} text-white`}>
+        {icon}
+      </div>
+      {trend && (
+        <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+          {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+          {trend}
+        </div>
+      )}
     </div>
-    <div className="mb-1">
-      <h4 className="text-2xl font-bold text-slate-900">{value}</h4>
+    
+    <div className="relative z-10">
+      <h4 className={`text-3xl font-bold tracking-tight mb-1 ${alert ? 'text-amber-600' : 'text-slate-800'}`}>{value}</h4>
+      <p className="text-sm font-semibold text-slate-500">{label}</p>
+      {subtext && <p className="text-xs text-slate-400 mt-2 font-medium">{subtext}</p>}
     </div>
-    <p className="text-sm text-slate-500">{label}</p>
-    <p className="text-xs text-emerald-600 mt-2 font-medium">{subtext}</p>
+    
+    {/* Decorative blob */}
+    <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full opacity-5 ${gradient}`}></div>
   </div>
 );
 

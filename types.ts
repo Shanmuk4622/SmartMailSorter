@@ -24,7 +24,8 @@ export interface ScanResult {
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   SCANNER = 'SCANNER',
-  HISTORY = 'HISTORY'
+  HISTORY = 'HISTORY',
+  NETWORK = 'NETWORK'
 }
 
 export interface ProcessingOptions {
