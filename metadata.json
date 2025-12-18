@@ -1,0 +1,5 @@
+{
+  "name": "SmartMailSorter",
+  "description": "AI-powered optical character recognition and mail sorting classification system using Gemini 2.5 Vision models.",
+  "requestFramePermissions": []
+}
