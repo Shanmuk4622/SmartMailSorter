@@ -70,4 +70,29 @@ const NetworkViz: React.FC = () => {
       .data(nodes)
       .join("circle")
       .attr("r", d => d.group === 1 ? 10 : (d.group === 2 ? 7 : 4))
-      .attr("fill", d => d.group === 1 ? "#3b82f6" : (d.group === 2 ? "#1
+      .attr("fill", d => d.group === 1 ? "#3b82f6" : (d.group === 2 ? "#10b981" : "#64748b"));
+
+    node.append("title")
+      .text(d => d.id);
+
+    simulation.on("tick", () => {
+      link
+        .attr("x1", d => (d.source as any).x)
+        .attr("y1", d => (d.source as any).y)
+        .attr("x2", d => (d.target as any).x)
+        .attr("y2", d => (d.target as any).y);
+
+      node
+        .attr("cx", d => (d as any).x)
+        .attr("cy", d => (d as any).y);
+    });
+
+    return () => {
+      simulation.stop();
+    };
+  }, []);
+
+  return <svg ref={svgRef} className="w-full h-full bg-slate-50 rounded-lg shadow-inner" />;
+};
+
+export default NetworkViz;

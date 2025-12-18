@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard, ScanLine, History, Settings, Mail } from 'lucide-react';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
+import HistoryLog from './components/HistoryLog';
 import { AppView, ScanResult } from './types';
 
 const App: React.FC = () => {
@@ -41,7 +42,7 @@ const App: React.FC = () => {
           />
           <NavButton 
             active={currentView === AppView.HISTORY} 
-            onClick={() => setCurrentView(AppView.DASHBOARD)} // Re-using dashboard for history in this demo
+            onClick={() => setCurrentView(AppView.HISTORY)} 
             icon={<History className="w-5 h-5" />}
             label="Log History"
           />
@@ -80,6 +81,7 @@ const App: React.FC = () => {
               <p className="text-slate-500 text-sm mt-1">
                 {currentView === AppView.DASHBOARD && 'Real-time metrics and accuracy reporting'}
                 {currentView === AppView.SCANNER && 'Upload, process, and classify mail items'}
+                {currentView === AppView.HISTORY && 'View and sort past processing records'}
               </p>
             </div>
             
@@ -93,6 +95,7 @@ const App: React.FC = () => {
           <div className="flex-1">
             {currentView === AppView.DASHBOARD && <Dashboard history={history} />}
             {currentView === AppView.SCANNER && <Scanner onScanComplete={handleScanComplete} />}
+            {currentView === AppView.HISTORY && <HistoryLog history={history} />}
           </div>
         </div>
       </main>

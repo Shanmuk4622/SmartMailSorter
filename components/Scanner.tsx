@@ -13,6 +13,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<MailData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [options, setOptions] = useState<ProcessingOptions>({
     grayscale: false,
     highContrast: false,
@@ -21,8 +22,19 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      if (!validTypes.includes(file.type)) {
+        setError("Invalid file type. Please upload a JPG or PNG image.");
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""; // Clear invalid selection
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (ev) => {
         if (ev.target?.result) {
@@ -45,6 +57,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const handleScan = async () => {
     if (!processedImage) return;
     setIsProcessing(true);
+    setError(null);
     const start = Date.now();
     try {
       const data = await extractMailData(processedImage);
@@ -61,7 +74,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       onScanComplete(scanResult);
     } catch (err) {
       console.error(err);
-      alert("Extraction failed. Please try again.");
+      setError("Extraction failed. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -71,6 +84,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     setImage(null);
     setProcessedImage(null);
     setResult(null);
+    setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -87,15 +101,30 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
           {!image ? (
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center p-8 cursor-pointer hover:bg-slate-50 transition-colors min-h-[300px]"
+              className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-8 cursor-pointer transition-colors min-h-[300px] ${
+                error 
+                  ? 'border-red-300 bg-red-50 hover:bg-red-50' 
+                  : 'border-slate-300 hover:bg-slate-50'
+              }`}
             >
-              <Upload className="w-12 h-12 text-slate-400 mb-4" />
-              <p className="text-slate-600 font-medium">Click to upload envelope image</p>
-              <p className="text-slate-400 text-sm mt-2">Supports JPG, PNG</p>
+              {error ? (
+                <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+              ) : (
+                <Upload className="w-12 h-12 text-slate-400 mb-4" />
+              )}
+              
+              <p className={`${error ? 'text-red-700' : 'text-slate-600'} font-medium`}>
+                {error || "Click to upload envelope image"}
+              </p>
+              
+              <p className={`${error ? 'text-red-500' : 'text-slate-400'} text-sm mt-2`}>
+                Supports JPG, PNG
+              </p>
+
               <input 
                 ref={fileInputRef}
                 type="file" 
-                accept="image/*" 
+                accept="image/png, image/jpeg, image/jpg" 
                 className="hidden" 
                 onChange={handleFileChange}
               />
@@ -109,6 +138,13 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                   className="max-h-full max-w-full object-contain" 
                 />
               </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
+                  <AlertTriangle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-2">
                 <button 
