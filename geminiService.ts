@@ -10,9 +10,9 @@ export const extractMailData = async (base64Image: string): Promise<MailData> =>
     // Strip header if present to get pure base64
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
 
-    console.log("[GeminiService] Sending request to Gemini-2.5-Flash-Image...");
+    console.log("[GeminiService] Sending request to Gemini-3-Flash-Preview...");
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', // Fast, efficient for OCR tasks
+      model: 'gemini-3-flash-preview', // Capable of multimodal text generation (OCR)
       contents: {
         parts: [
           {

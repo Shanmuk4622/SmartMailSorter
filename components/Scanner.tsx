@@ -26,7 +26,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
