@@ -3,6 +3,7 @@ import { MailData, ProcessingOptions, ScanResult } from '../types';
 import { extractMailData } from '../geminiService';
 import { processImage } from '../imageUtils';
 import { Loader2, Upload, Scan, RotateCcw, CheckCircle, AlertTriangle } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 interface ScannerProps {
   onScanComplete: (result: ScanResult) => void;
@@ -32,7 +33,6 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
         if (parsed.options) setOptions(parsed.options);
         if (parsed.result) setResult(parsed.result);
         if (parsed.error) setError(parsed.error);
-        // Setting image last to ensure consistency
         if (parsed.image) {
           setImage(parsed.image);
           console.log("SmartMail: Restored previous session state.");
@@ -45,7 +45,6 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
   // Save state on change
   useEffect(() => {
-    // Only save if we have some meaningful state to preserve (image or error)
     if (!image && !error) return; 
 
     try {
@@ -65,12 +64,14 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     setError(null);
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      console.log("File selected:", file.name, file.type, file.size);
       
       const validTypes = ['image/jpeg', 'image/png', 'image/jpg'];
       if (!validTypes.includes(file.type)) {
+        console.warn("Invalid file type uploaded:", file.type);
         setError("Invalid file type. Please upload a JPG or PNG image.");
         if (fileInputRef.current) {
-          fileInputRef.current.value = ""; // Clear invalid selection
+          fileInputRef.current.value = ""; 
         }
         return;
       }
@@ -78,19 +79,30 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         if (ev.target?.result) {
+          console.log("File read successfully as DataURL");
           setImage(ev.target.result as string);
           setResult(null);
-          setProcessedImage(null); // Reset processed
+          setProcessedImage(null); 
         }
       };
+      reader.onerror = (err) => {
+        console.error("FileReader error:", err);
+        setError("Failed to read file.");
+      }
       reader.readAsDataURL(file);
     }
   };
 
-  // Re-run image processing when options change or image loads
   useEffect(() => {
     if (image) {
-      processImage(image, options).then(setProcessedImage);
+      console.log("Processing image with options:", options);
+      processImage(image, options).then(processed => {
+        console.log("Image processing complete.");
+        setProcessedImage(processed);
+      }).catch(err => {
+        console.error("Image processing failed:", err);
+        setError("Failed to process image filters.");
+      });
     }
   }, [image, options]);
 
@@ -99,11 +111,46 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     setIsProcessing(true);
     setError(null);
     const start = Date.now();
+    console.log("Starting scan operation...");
+
     try {
+      // 1. Extract Data
+      console.log("Invoking extractMailData...");
       const data = await extractMailData(processedImage);
+      console.log("Extraction successful. Result:", data);
       setResult(data);
+
+      // 2. Insert into Supabase
+      console.log("Saving result to Supabase...");
+      
+      // Safety check: ensure confidence is an integer 0-100 before DB insert
+      const safeConfidence = Math.round(data.confidence);
+
+      const { data: dbData, error: dbError } = await supabase
+        .from('mail_scans')
+        .insert([{
+          recipient: data.recipient,
+          address: data.address,
+          pin_code: data.pin_code,
+          city: data.city,
+          state: data.state || '',
+          country: data.country,
+          sorting_center_id: data.sorting_center_id,
+          sorting_center_name: data.sorting_center_name,
+          confidence: safeConfidence, // Use the sanitized value
+          status: 'completed'
+        }])
+        .select();
+
+      if (dbError) {
+        console.error("Supabase Insert Error:", dbError.message, dbError.details);
+        // We log it but don't stop the user from seeing the result
+      } else {
+        console.log("Supabase insert successful:", dbData);
+      }
+
       const scanResult: ScanResult = {
-        id: crypto.randomUUID(),
+        id: dbData ? dbData[0].id : crypto.randomUUID(),
         timestamp: Date.now(),
         originalImageUrl: image!,
         processedImageUrl: processedImage,
@@ -111,16 +158,39 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
         status: 'completed',
         processingTimeMs: Date.now() - start
       };
+      
       onScanComplete(scanResult);
-    } catch (err) {
-      console.error(err);
-      setError("Extraction failed. Please try again.");
+
+    } catch (err: any) {
+      console.error("Scanner Error Caught:", err);
+      
+      let msg = "An unexpected error occurred.";
+      
+      if (err.message) {
+        if (err.message.includes("fetch failed") || err.message.includes("NetworkError")) {
+           msg = "Network connection failed. Please check your internet.";
+        } else if (err.message.includes("Invalid JSON")) {
+           msg = "Could not read address data from image. Please try a clearer photo.";
+        } else if (err.message.includes("429")) {
+           msg = "Too many requests. Please wait a moment before trying again.";
+        } else if (err.message.includes("503")) {
+           msg = "AI Service is temporarily unavailable.";
+        } else if (err.message.includes("API key")) {
+           msg = "System Configuration Error: Invalid API Key.";
+        } else {
+           msg = `Extraction failed: ${err.message}`;
+        }
+      }
+      
+      setError(msg);
     } finally {
       setIsProcessing(false);
+      console.log("Scan operation finished.");
     }
   };
 
   const reset = () => {
+    console.log("Resetting scanner state.");
     setImage(null);
     setProcessedImage(null);
     setResult(null);
@@ -182,8 +252,8 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
-                  <AlertTriangle className="w-4 h-4" />
-                  {error}
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
 

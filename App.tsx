@@ -1,16 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, ScanLine, History, Settings, Mail } from 'lucide-react';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
 import { AppView, ScanResult } from './types';
+import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [history, setHistory] = useState<ScanResult[]>([]);
 
+  // Fetch data from Supabase on mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      const { data, error } = await supabase
+        .from('mail_scans')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching history:', error);
+      } else if (data) {
+        // Transform DB data to ScanResult format
+        const mappedHistory: ScanResult[] = data.map((row: any) => ({
+          id: row.id,
+          timestamp: new Date(row.created_at).getTime(),
+          status: row.status,
+          originalImageUrl: row.original_image_url || undefined,
+          data: {
+            recipient: row.recipient,
+            address: row.address,
+            pin_code: row.pin_code,
+            city: row.city,
+            state: row.state,
+            country: row.country,
+            sorting_center_id: row.sorting_center_id,
+            sorting_center_name: row.sorting_center_name,
+            confidence: row.confidence
+          }
+        }));
+        setHistory(mappedHistory);
+      }
+    };
+
+    fetchHistory();
+  }, []);
+
   const handleScanComplete = (result: ScanResult) => {
-    setHistory(prev => [...prev, result]);
+    // Optimistically update UI
+    setHistory(prev => [result, ...prev]);
   };
 
   return (
@@ -53,9 +91,9 @@ const App: React.FC = () => {
             <p className="text-xs text-slate-400 mb-2">System Status</p>
             <div className="flex items-center gap-2 mb-1">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-sm font-medium text-slate-200">ML Model Online</span>
+              <span className="text-sm font-medium text-slate-200">System Online</span>
             </div>
-            <div className="text-xs text-slate-500">Backend: Gemini 2.5 Flash</div>
+            <div className="text-xs text-slate-500">Connected to Supabase</div>
           </div>
         </div>
       </aside>
