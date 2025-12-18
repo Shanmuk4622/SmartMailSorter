@@ -31,13 +31,6 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
       { name: '11:00', confidence: 88 },
     ];
 
-  const regionData = [
-    { name: 'North', count: 45 },
-    { name: 'South', count: 30 },
-    { name: 'East', count: 55 },
-    { name: 'West', count: 20 },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Top Stats Cards */}
@@ -52,7 +45,7 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
         {/* Main Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-semibold text-slate-800 mb-6">OCR Confidence Trend</h3>
-          <div className="h-[300px]">
+          <div className="w-full h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

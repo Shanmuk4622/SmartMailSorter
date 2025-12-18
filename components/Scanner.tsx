@@ -8,6 +8,8 @@ interface ScannerProps {
   onScanComplete: (result: ScanResult) => void;
 }
 
+const STORAGE_KEY = 'smartmail_scanner_state';
+
 const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const [image, setImage] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
@@ -20,6 +22,44 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     denoise: false
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load state on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.options) setOptions(parsed.options);
+        if (parsed.result) setResult(parsed.result);
+        if (parsed.error) setError(parsed.error);
+        // Setting image last to ensure consistency
+        if (parsed.image) {
+          setImage(parsed.image);
+          console.log("SmartMail: Restored previous session state.");
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load saved scanner state:", e);
+    }
+  }, []);
+
+  // Save state on change
+  useEffect(() => {
+    // Only save if we have some meaningful state to preserve (image or error)
+    if (!image && !error) return; 
+
+    try {
+      const stateToSave = {
+        image,
+        result,
+        options,
+        error
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch (e) {
+      console.warn("Failed to auto-save scanner state (quota exceeded?):", e);
+    }
+  }, [image, result, options, error]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -86,6 +126,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     setResult(null);
     setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (
