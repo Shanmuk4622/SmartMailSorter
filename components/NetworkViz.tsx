@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { RefreshCw, Zap, Clock, AlertCircle } from 'lucide-react';
+import { RefreshCw, Zap, Server, Activity, Database } from 'lucide-react';
 
 interface NetworkNode extends d3.SimulationNodeDatum {
   id: string;
@@ -37,34 +37,36 @@ const NetworkViz: React.FC = () => {
       .attr("viewBox", [0, 0, width, height])
       .attr("class", "w-full h-full");
 
-    // Define Gradients
+    // Define Filters & Gradients for "Glowing" effect
     const defs = svg.append("defs");
     
-    // Active Gradient
-    const activeGrad = defs.append("linearGradient").attr("id", "grad-active").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
-    activeGrad.append("stop").attr("offset", "0%").style("stop-color", "#34d399"); // emerald-400
-    activeGrad.append("stop").attr("offset", "100%").style("stop-color", "#059669"); // emerald-600
+    // Glow Filter
+    const filter = defs.append("filter").attr("id", "glow");
+    filter.append("feGaussianBlur").attr("stdDeviation", "2.5").attr("result", "coloredBlur");
+    const feMerge = filter.append("feMerge");
+    feMerge.append("feMergeNode").attr("in", "coloredBlur");
+    feMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    // Busy Gradient
-    const busyGrad = defs.append("linearGradient").attr("id", "grad-busy").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
-    busyGrad.append("stop").attr("offset", "0%").style("stop-color", "#f87171"); // red-400
-    busyGrad.append("stop").attr("offset", "100%").style("stop-color", "#dc2626"); // red-600
+    // Node Gradients
+    const createGradient = (id: string, color: string) => {
+      const grad = defs.append("radialGradient").attr("id", id);
+      grad.append("stop").attr("offset", "0%").style("stop-color", color).style("stop-opacity", "1");
+      grad.append("stop").attr("offset", "100%").style("stop-color", color).style("stop-opacity", "0.3");
+    };
 
-    // Idle Gradient
-    const idleGrad = defs.append("linearGradient").attr("id", "grad-idle").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
-    idleGrad.append("stop").attr("offset", "0%").style("stop-color", "#94a3b8"); // slate-400
-    idleGrad.append("stop").attr("offset", "100%").style("stop-color", "#64748b"); // slate-500
-
+    createGradient("grad-active", "#10b981"); // emerald
+    createGradient("grad-busy", "#f43f5e"); // rose
+    createGradient("grad-idle", "#94a3b8"); // slate
 
     // Data
     const nodes: NetworkNode[] = [
-      { id: "HUB-NYC", type: "HUB", status: "busy", label: "New York Central" },
-      { id: "HUB-CHI", type: "HUB", status: "active", label: "Chicago Hub" },
-      { id: "HUB-LAX", type: "HUB", status: "active", label: "Los Angeles Hub" },
-      { id: "HUB-MIA", type: "HUB", status: "idle", label: "Miami Hub" },
+      { id: "HUB-NYC", type: "HUB", status: "busy", label: "New York" },
+      { id: "HUB-CHI", type: "HUB", status: "active", label: "Chicago" },
+      { id: "HUB-LAX", type: "HUB", status: "active", label: "Los Angeles" },
+      { id: "HUB-MIA", type: "HUB", status: "idle", label: "Miami" },
       
-      { id: "LOC-BK", type: "LOCAL", status: "busy", label: "Brooklyn Dist." },
-      { id: "LOC-QN", type: "LOCAL", status: "active", label: "Queens Dist." },
+      { id: "LOC-BK", type: "LOCAL", status: "busy", label: "Brooklyn" },
+      { id: "LOC-QN", type: "LOCAL", status: "active", label: "Queens" },
       { id: "LOC-NJ", type: "LOCAL", status: "active", label: "Jersey City" },
       
       { id: "LOC-NP", type: "LOCAL", status: "active", label: "Naperville" },
@@ -80,39 +82,35 @@ const NetworkViz: React.FC = () => {
       { source: "HUB-NYC", target: "HUB-LAX", value: 3 },
       { source: "HUB-NYC", target: "HUB-MIA", value: 2 },
       { source: "HUB-CHI", target: "HUB-LAX", value: 3 },
-      
       { source: "HUB-NYC", target: "LOC-BK", value: 8 },
       { source: "HUB-NYC", target: "LOC-QN", value: 6 },
       { source: "HUB-NYC", target: "LOC-NJ", value: 5 },
-      
       { source: "HUB-CHI", target: "LOC-NP", value: 4 },
       { source: "HUB-CHI", target: "LOC-EV", value: 3 },
-      
       { source: "HUB-LAX", target: "LOC-SM", value: 5 },
       { source: "HUB-LAX", target: "LOC-LB", value: 6 },
       { source: "HUB-LAX", target: "LOC-PS", value: 2 },
     ];
 
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d) => d.target.type === 'LOCAL' ? 80 : 200))
-      .force("charge", d3.forceManyBody().strength(-400))
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d) => d.target.type === 'LOCAL' ? 100 : 250))
+      .force("charge", d3.forceManyBody().strength(-500))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(40));
+      .force("collide", d3.forceCollide().radius(50));
 
+    // Links
     const link = svg.append("g")
-      .attr("stroke", "#e2e8f0")
-      .attr("stroke-opacity", 0.6)
+      .attr("class", "links")
       .selectAll("line")
       .data(links)
       .join("line")
-      .attr("stroke-width", d => Math.sqrt(d.value) * 1.5)
-      .attr("stroke-dasharray", d => (d.target as NetworkNode).status === 'busy' ? "4 4" : "0");
+      .attr("stroke", "#334155")
+      .attr("stroke-width", d => Math.sqrt(d.value))
+      .attr("opacity", 0.6);
 
-    // Animate busy links
-    // Note: D3 animation in React useEffect can be tricky, simpler to use CSS class if possible, 
-    // but here we just render static for now or use basic attr tweening.
-
+    // Node Container
     const nodeGroup = svg.append("g")
+      .attr("class", "nodes")
       .selectAll("g")
       .data(nodes)
       .join("g")
@@ -121,37 +119,53 @@ const NetworkViz: React.FC = () => {
         .on("drag", dragged)
         .on("end", dragended));
 
-    // Glow effect for hubs
+    // Outer glow ring
     nodeGroup.append("circle")
-      .attr("r", d => d.type === 'HUB' ? 35 : 0)
-      .attr("fill", d => {
-        if (d.status === 'active') return "rgba(16, 185, 129, 0.2)";
-        if (d.status === 'busy') return "rgba(244, 63, 94, 0.2)";
-        return "transparent";
+      .attr("r", d => d.type === 'HUB' ? 25 : 12)
+      .attr("fill", "transparent")
+      .attr("stroke", d => {
+        if (d.status === 'active') return "#10b981";
+        if (d.status === 'busy') return "#f43f5e";
+        return "#94a3b8";
       })
-      .attr("class", "pulse-circle");
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3 3")
+      .attr("opacity", 0.5)
+      .append("animateTransform")
+        .attr("attributeName", "transform")
+        .attr("attributeType", "XML")
+        .attr("type", "rotate")
+        .attr("from", "0 0 0")
+        .attr("to", "360 0 0")
+        .attr("dur", "10s")
+        .attr("repeatCount", "indefinite");
 
-    // Main Node Circle
+    // Main Node
     nodeGroup.append("circle")
-      .attr("r", d => d.type === 'HUB' ? 18 : 10)
-      .attr("fill", d => `url(#grad-${d.status})`)
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 3)
-      .attr("class", "cursor-pointer transition-all hover:stroke-blue-200")
+      .attr("r", d => d.type === 'HUB' ? 15 : 6)
+      .attr("fill", d => {
+        if (d.status === 'active') return "#10b981";
+        if (d.status === 'busy') return "#f43f5e";
+        return "#94a3b8";
+      })
+      .style("filter", "url(#glow)")
+      .attr("stroke", "#0f172a")
+      .attr("stroke-width", 2)
+      .attr("class", "cursor-pointer transition-all")
       .on("click", (event, d) => {
         setSelectedNode(d);
         event.stopPropagation();
       });
 
-    // Label
+    // Labels
     nodeGroup.append("text")
-      .text(d => d.type === 'HUB' ? d.id.split('-')[1] : '')
+      .text(d => d.type === 'HUB' ? d.label.toUpperCase() : '')
       .attr("text-anchor", "middle")
-      .attr("dy", 4)
-      .attr("fill", "#fff")
+      .attr("dy", -30)
+      .attr("fill", "#94a3b8")
       .attr("font-size", "10px")
       .attr("font-weight", "bold")
-      .style("pointer-events", "none");
+      .attr("letter-spacing", "1px");
 
     simulation.on("tick", () => {
       link
@@ -187,91 +201,99 @@ const NetworkViz: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex h-full gap-6">
-      <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden relative">
-         <div className="absolute top-6 left-6 z-10">
-           <h2 className="text-2xl font-bold text-slate-800">Network Topology</h2>
-           <p className="text-slate-500 text-sm">Real-time connection status</p>
+    <div className="flex flex-col lg:flex-row h-full gap-6">
+      <div className="flex-1 bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 overflow-hidden relative group">
+         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+         
+         <div className="absolute top-6 left-6 z-10 pointer-events-none">
+           <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+             <Database className="w-6 h-6 text-blue-500" />
+             NETWORK TOPOLOGY
+           </h2>
+           <p className="text-slate-400 text-xs font-mono mt-1">LIVE TRAFFIC MONITORING /// NODE_STATUS_ACTIVE</p>
          </div>
          
          {/* Graph Container */}
-         <div ref={containerRef} className="w-full h-full bg-slate-50/30">
+         <div ref={containerRef} className="w-full h-full cursor-move bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
            <svg ref={svgRef} className="w-full h-full"></svg>
          </div>
 
          {/* Legend */}
-         <div className="absolute bottom-6 right-6 bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-slate-100 flex flex-col gap-2">
-           <div className="flex items-center gap-2 text-sm text-slate-600">
-             <span className="w-3 h-3 rounded-full bg-emerald-500"></span> Active Route
+         <div className="absolute bottom-6 right-6 bg-slate-800/90 backdrop-blur p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-2">
+           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+             <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></span> OPTIMAL
            </div>
-           <div className="flex items-center gap-2 text-sm text-slate-600">
-             <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span> Congested/Busy
-           </div>
-           <div className="flex items-center gap-2 text-sm text-slate-600">
-             <span className="w-3 h-3 rounded-full bg-slate-400"></span> Idle/Maintenance
+           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+             <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse"></span> HIGH LOAD
            </div>
          </div>
       </div>
 
       {/* Info Panel */}
-      <div className="w-80 flex flex-col gap-4">
-        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-              <Zap className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-lg">System Status</h3>
-              <p className="text-indigo-200 text-sm">Live Updates</p>
-            </div>
+      <div className="w-full lg:w-80 flex flex-col gap-4">
+        {/* Status Card */}
+        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Zap className="w-24 h-24" />
           </div>
-          <div className="space-y-4">
-             <div className="flex justify-between items-center bg-white/10 p-3 rounded-xl border border-white/10">
-               <span className="text-sm font-medium">Total Hubs</span>
-               <span className="font-bold text-xl">4</span>
-             </div>
-             <div className="flex justify-between items-center bg-white/10 p-3 rounded-xl border border-white/10">
-               <span className="text-sm font-medium">Active Links</span>
-               <span className="font-bold text-xl">12</span>
-             </div>
-             <div className="flex justify-between items-center bg-white/10 p-3 rounded-xl border border-white/10">
-               <span className="text-sm font-medium">Throughput</span>
-               <span className="font-bold text-xl">98%</span>
-             </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/10">
+                <Activity className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-lg">System Metrics</h3>
+            </div>
+            <div className="space-y-3">
+               <MetricRow label="Total Hubs" value="4" />
+               <MetricRow label="Active Routes" value="12" />
+               <MetricRow label="Uptime" value="99.9%" />
+            </div>
           </div>
         </div>
 
+        {/* Node Details */}
         <div className="flex-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-400" />
-            Node Details
+          <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <Server className="w-5 h-5 text-slate-400" />
+            Node Inspector
           </h3>
+          
           {selectedNode ? (
-            <div className="animate-fade-in space-y-4">
-              <div className={`p-4 rounded-xl border-l-4 ${
-                selectedNode.status === 'active' ? 'bg-emerald-50 border-emerald-500' :
-                selectedNode.status === 'busy' ? 'bg-red-50 border-red-500' : 'bg-slate-50 border-slate-400'
-              }`}>
-                <p className="text-xs font-bold uppercase tracking-wider opacity-60 mb-1">{selectedNode.type}</p>
-                <p className="text-xl font-bold text-slate-800">{selectedNode.label}</p>
-                <p className="text-sm mt-1 capitalize font-medium opacity-80">{selectedNode.status}</p>
+            <div className="animate-fade-in space-y-6">
+              <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-lg">
+                <div className={`absolute top-0 left-0 w-1 h-full ${
+                  selectedNode.status === 'active' ? 'bg-emerald-500' :
+                  selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
+                }`}></div>
+                
+                <p className="text-xs font-mono text-slate-400 mb-2">{selectedNode.type}_ID: {selectedNode.id}</p>
+                <h2 className="text-2xl font-bold mb-1">{selectedNode.label}</h2>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                     selectedNode.status === 'active' ? 'bg-emerald-500' :
+                     selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
+                  }`}></div>
+                  <span className="text-sm font-medium uppercase tracking-wider">{selectedNode.status}</span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-slate-50 p-3 rounded-lg">
-                  <p className="text-xs text-slate-400 mb-1">Queue</p>
-                  <p className="font-mono font-bold text-slate-700">{Math.floor(Math.random() * 500)} items</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Queue</p>
+                  <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 500)}</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-lg">
-                  <p className="text-xs text-slate-400 mb-1">Latency</p>
-                  <p className="font-mono font-bold text-slate-700">{Math.floor(Math.random() * 20) + 5}ms</p>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Latency</p>
+                  <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 20) + 5}ms</p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center">
-              <RefreshCw className="w-12 h-12 mb-3 opacity-20" />
-              <p>Select a node on the graph to view real-time metrics.</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-4">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                 <RefreshCw className="w-6 h-6 opacity-30" />
+              </div>
+              <p className="text-sm font-medium">Select any node on the topology graph to view real-time diagnostics.</p>
             </div>
           )}
         </div>
@@ -279,5 +301,12 @@ const NetworkViz: React.FC = () => {
     </div>
   );
 };
+
+const MetricRow = ({ label, value }: { label: string, value: string }) => (
+  <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-white/5">
+    <span className="text-sm font-medium text-indigo-100">{label}</span>
+    <span className="font-bold font-mono">{value}</span>
+  </div>
+);
 
 export default NetworkViz;

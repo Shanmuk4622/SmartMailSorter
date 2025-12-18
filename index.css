@@ -2,9 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Global Styles */
 :root {
-  --primary-glow: conic-gradient(from 180deg at 50% 50%, #2a8af6 0deg, #a853ba 180deg, #e92a67 360deg);
+  --primary: #3b82f6;
+  --primary-dark: #1d4ed8;
+  --secondary: #6366f1;
+  --accent: #10b981;
 }
 
 body {
@@ -12,7 +14,7 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
 
-/* Custom Scrollbar */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -30,15 +32,46 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes scanLine {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); }
+}
+
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.animate-scan {
+  animation: scanLine 2s linear infinite;
+  background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.5), #3b82f6);
+  box-shadow: 0 0 15px #3b82f6;
+}
+
+/* Utilities */
 .glass-panel {
-  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  @apply bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl;
 }
 
-/* Card Hover Effects */
-.hover-card {
-  @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+.tech-border {
+  @apply border border-slate-200;
+  position: relative;
+}
+
+.tech-border::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 20px rgba(255,255,255,0.5);
 }

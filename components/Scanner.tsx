@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MailData, ProcessingOptions, ScanResult } from '../types';
 import { extractMailData } from '../geminiService';
 import { processImage } from '../imageUtils';
-import { Loader2, Upload, Scan, RotateCcw, CheckCircle, AlertTriangle, ArrowRight, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Loader2, Upload, Scan, RotateCcw, CheckCircle, AlertTriangle, ArrowRight, Image as ImageIcon, Sparkles, Cpu, Crosshair } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface ScannerProps {
@@ -22,7 +22,11 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     highContrast: false,
     denoise: false
   });
+  const [cnnLog, setCnnLog] = useState<string>("");
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>();
 
   useEffect(() => {
     try {
@@ -45,6 +49,74 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       console.warn("Failed to auto-save scanner state:", e);
     }
   }, [result, options]);
+
+  // CNN Visualization Effect
+  useEffect(() => {
+    if (!isProcessing || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let frames = 0;
+    const logs = [
+      "Initializing Neural Network...",
+      "Loading Tensor Weights...",
+      "Detecting Edges...",
+      "Extracting ROI...",
+      "Normalizing Inputs...",
+      "Performing OCR Inference...",
+      "Classifying Region...",
+      "Confidence Analysis..."
+    ];
+
+    const animate = () => {
+      // Clear semi-transparently for trail effect
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (frames % 10 === 0) {
+        // Draw random bounding boxes to simulate object detection
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+        const w = Math.random() * 100 + 50;
+        const h = Math.random() * 30 + 10;
+        
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+        
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+        ctx.fillRect(x, y, w, h);
+
+        // Simulated confidence text
+        ctx.fillStyle = '#00ff00';
+        ctx.font = '10px monospace';
+        ctx.fillText(`CONF: ${(Math.random() * 0.9 + 0.1).toFixed(2)}`, x, y - 5);
+      }
+
+      // Update pseudo-log
+      if (frames % 40 === 0 && frames / 40 < logs.length) {
+        setCnnLog(logs[Math.floor(frames / 40)]);
+      }
+
+      frames++;
+      requestRef.current = requestAnimationFrame(animate);
+    };
+
+    // Set canvas size to match displayed image
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    if (rect) {
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+
+    animate();
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [isProcessing]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -85,6 +157,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const handleScan = async () => {
     if (!processedImage) return;
     setIsProcessing(true);
+    setCnnLog("Initializing...");
     setError(null);
     const start = Date.now();
 
@@ -151,20 +224,23 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
       {/* Left Column: Input */}
       <div className="flex flex-col gap-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex-1 flex flex-col hover:shadow-lg transition-all duration-300">
-          <div className="flex items-center justify-between mb-6">
-             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-200">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex-1 flex flex-col hover:shadow-lg transition-all duration-500 relative overflow-hidden group">
+          {/* Subtle tech grid background */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+
+          <div className="flex items-center justify-between mb-6 relative z-10">
+             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-3">
+              <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
                 <ImageIcon className="w-5 h-5" />
               </div>
-              Image Input
+              Visual Input Stream
             </h2>
             {image && (
                <button 
                   onClick={reset}
-                  className="text-sm font-semibold text-slate-500 hover:text-red-500 flex items-center gap-1 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
+                  className="text-xs font-semibold text-slate-500 hover:text-red-500 flex items-center gap-1 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50 border border-transparent hover:border-red-100"
                 >
-                  <RotateCcw className="w-4 h-4" /> Reset
+                  <RotateCcw className="w-3 h-3" /> Reset
                 </button>
             )}
           </div>
@@ -172,23 +248,19 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
           {!image ? (
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className={`flex-1 border-3 border-dashed rounded-2xl flex flex-col items-center justify-center p-12 cursor-pointer transition-all duration-300 group relative overflow-hidden ${
-                error 
-                  ? 'border-red-300 bg-red-50' 
-                  : 'border-slate-200 bg-slate-50/50 hover:bg-indigo-50/50 hover:border-indigo-400'
+              className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-12 cursor-pointer transition-all duration-300 relative overflow-hidden bg-slate-50/50 hover:bg-blue-50/30 ${
+                error ? 'border-red-300' : 'border-slate-300 hover:border-blue-400'
               }`}
             >
-              <div className="absolute inset-0 bg-[radial-gradient(#e0e7ff_1px,transparent_1px)] [background-size:16px_16px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none opacity-50"></div>
-              
-              <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-xl transition-transform group-hover:scale-110 duration-300 relative z-10 ${error ? 'bg-red-100 text-red-500' : 'bg-white text-indigo-600'}`}>
+              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-xl transition-transform duration-300 relative z-10 ${error ? 'bg-red-100 text-red-500' : 'bg-white text-blue-600'}`}>
                 {error ? <AlertTriangle className="w-10 h-10" /> : <Upload className="w-10 h-10" />}
               </div>
               
               <h3 className={`text-lg font-bold mb-2 relative z-10 ${error ? 'text-red-700' : 'text-slate-700'}`}>
-                {error || "Upload Envelope Image"}
+                {error || "Upload Envelope"}
               </h3>
-              <p className="text-slate-400 text-center max-w-xs relative z-10 font-medium">
-                Drag and drop or click to browse. Supports high-resolution JPG & PNG.
+              <p className="text-slate-400 text-center max-w-xs relative z-10 text-sm">
+                Drop image here to initialize neural extraction pipeline.
               </p>
               
               <input 
@@ -200,24 +272,47 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
               />
             </div>
           ) : (
-            <div className="flex-1 flex flex-col gap-6 animate-fade-in">
-              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-inner aspect-video flex items-center justify-center group">
+            <div className="flex-1 flex flex-col gap-6 animate-fade-in relative z-10">
+              {/* Image Container with "CNN" Overlay */}
+              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl aspect-video flex items-center justify-center group/img">
                 <img 
                   src={processedImage || image} 
                   alt="Preview" 
-                  className="max-h-full max-w-full object-contain transition-opacity duration-300" 
+                  className="max-h-full max-w-full object-contain" 
+                  style={{ opacity: isProcessing ? 0.6 : 1, transition: 'opacity 0.3s' }}
                 />
-                {/* Overlay with filters info */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-4 py-1.5 rounded-full flex items-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
+                
+                {/* CNN Overlay Canvas */}
+                {isProcessing && (
+                  <>
+                    <canvas 
+                      ref={canvasRef} 
+                      className="absolute inset-0 w-full h-full pointer-events-none mix-blend-screen"
+                    />
+                    {/* Scanning Line */}
+                    <div className="absolute left-0 w-full h-1 bg-green-400 shadow-[0_0_15px_rgba(74,222,128,0.8)] animate-scan pointer-events-none"></div>
+                    
+                    {/* Tech Text Overlay */}
+                    <div className="absolute bottom-4 left-4 font-mono text-xs text-green-400 bg-black/80 px-3 py-1 rounded border border-green-500/30">
+                      <span className="animate-pulse">●</span> {cnnLog}
+                    </div>
+                  </>
+                )}
+
+                {/* Filter Badge */}
+                {!isProcessing && (
+                  <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center opacity-0 group-hover/img:opacity-100 transition-all duration-300">
+                    <Sparkles className="w-3 h-3 text-yellow-400 mr-2" />
                     <span className="text-xs text-white/90 font-bold uppercase tracking-wider">
-                      {options.grayscale ? 'B&W • ' : ''}
-                      {options.highContrast ? 'High Contrast' : 'Original'}
+                      {options.grayscale ? 'B&W ' : ''}
+                      {options.highContrast ? 'Hi-Con' : 'Original'}
                     </span>
-                </div>
+                  </div>
+                )}
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-sm text-red-700 shadow-sm">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-sm text-red-700 shadow-sm animate-fade-in">
                   <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block mb-1">Processing Error</span>
@@ -226,18 +321,24 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                 </div>
               )}
 
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">Image Enhancements</label>
-                <div className="flex gap-3">
+              {/* Controls */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+                <div className="flex items-center justify-between mb-3">
+                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pre-Processing</label>
+                   <Cpu className="w-4 h-4 text-slate-300" />
+                </div>
+                <div className="flex gap-2">
                   <button 
                     onClick={() => setOptions(p => ({ ...p, grayscale: !p.grayscale }))}
-                    className={`flex-1 py-3 px-4 text-sm rounded-xl font-bold transition-all border ${options.grayscale ? 'bg-slate-800 text-white border-slate-800 shadow-lg transform -translate-y-0.5' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                    disabled={isProcessing}
+                    className={`flex-1 py-2 px-4 text-xs font-bold rounded-lg transition-all border ${options.grayscale ? 'bg-slate-800 text-white border-slate-800 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     Grayscale
                   </button>
                   <button 
                     onClick={() => setOptions(p => ({ ...p, highContrast: !p.highContrast }))}
-                    className={`flex-1 py-3 px-4 text-sm rounded-xl font-bold transition-all border ${options.highContrast ? 'bg-slate-800 text-white border-slate-800 shadow-lg transform -translate-y-0.5' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                    disabled={isProcessing}
+                    className={`flex-1 py-2 px-4 text-xs font-bold rounded-lg transition-all border ${options.highContrast ? 'bg-slate-800 text-white border-slate-800 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     High Contrast
                   </button>
@@ -247,18 +348,18 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
               <button
                 onClick={handleScan}
                 disabled={isProcessing}
-                className="mt-auto w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-2xl font-bold shadow-lg shadow-emerald-500/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all transform active:scale-[0.98]"
+                className="mt-auto w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 disabled:opacity-80 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all active:scale-[0.98] group"
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Analyzing Image...</span>
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-200" />
+                    <span>Neural Processing...</span>
                   </>
                 ) : (
                   <>
-                    <Scan className="w-5 h-5" />
-                    <span>Run AI Extraction</span>
-                    <ArrowRight className="w-5 h-5 opacity-50" />
+                    <Scan className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span>Initiate Scan</span>
+                    <ArrowRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}
               </button>
@@ -269,94 +370,86 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
       {/* Right Column: Results */}
       <div className="flex flex-col gap-6">
-        <div className={`bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-full flex flex-col transition-all duration-500 hover:shadow-lg ${result ? 'ring-2 ring-emerald-500/20' : ''}`}>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
-              <div className={`p-2.5 rounded-xl shadow-md ${result ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-slate-100 text-slate-500'}`}>
-                {result ? <CheckCircle className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+        <div className={`bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-full flex flex-col transition-all duration-500 relative overflow-hidden ${result ? 'ring-1 ring-emerald-500/30' : ''}`}>
+          
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-3">
+              <div className={`p-2 rounded-lg shadow-md transition-colors ${result ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-slate-100 text-slate-400'}`}>
+                {result ? <CheckCircle className="w-5 h-5" /> : <Crosshair className="w-5 h-5" />}
               </div>
-              Extraction Results
+              Inference Result
             </h2>
             {result && (
-              <span className="text-xs font-mono font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{new Date().toLocaleTimeString()}</span>
+              <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">{result.confidence}% Match</span>
             )}
           </div>
 
           {!result ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8">
-               <div className="w-24 h-24 bg-gradient-to-br from-slate-50 to-slate-100 rounded-full flex items-center justify-center mb-6 animate-pulse shadow-inner">
-                 <Scan className="w-10 h-10 opacity-20" />
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8 relative z-10">
+               <div className="w-32 h-32 rounded-full border-4 border-slate-100 flex items-center justify-center mb-6 relative">
+                 <div className="absolute inset-0 rounded-full border-t-4 border-blue-500 animate-spin opacity-20"></div>
+                 <Scan className="w-10 h-10 opacity-30 text-blue-500" />
                </div>
-               <h3 className="text-lg font-bold text-slate-600 mb-2">Ready to Analyze</h3>
-               <p className="max-w-xs text-sm font-medium opacity-70">Upload an image and click "Run AI Extraction" to see intelligent sorting details here.</p>
+               <h3 className="text-lg font-bold text-slate-600 mb-2">Awaiting Input</h3>
+               <p className="max-w-xs text-sm font-medium opacity-70">Neural engine standby. Upload envelope to begin classification.</p>
             </div>
           ) : (
-            <div className="space-y-8 animate-fade-in">
-              {/* Confidence Score */}
-              <div className="flex items-center justify-between p-5 bg-gradient-to-r from-slate-50 to-white rounded-2xl border border-slate-100 shadow-sm">
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Confidence Score</p>
-                  <div className="flex items-baseline gap-1">
-                     <span className={`text-4xl font-black ${result.confidence > 80 ? 'text-emerald-600' : 'text-amber-500'}`}>{result.confidence}</span>
-                     <span className="text-sm font-bold text-slate-400">%</span>
-                  </div>
+            <div className="space-y-8 animate-fade-in relative z-10">
+              
+              {/* Confidence Meter */}
+              <div className="bg-slate-50/50 rounded-xl p-6 border border-slate-100">
+                <div className="flex justify-between items-end mb-2">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Confidence Level</span>
+                  <span className={`text-2xl font-black ${result.confidence > 80 ? 'text-emerald-500' : 'text-amber-500'}`}>{result.confidence}%</span>
                 </div>
-                <div className="text-right">
-                   <div className={`px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 ${result.confidence > 80 ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
-                     {result.confidence > 80 ? (
-                       <><CheckCircle className="w-4 h-4" /> High Accuracy</>
-                     ) : (
-                       <><AlertTriangle className="w-4 h-4" /> Verify Manually</>
-                     )}
-                   </div>
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${result.confidence > 80 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                    style={{ width: `${result.confidence}%` }}
+                  ></div>
                 </div>
               </div>
 
               {/* Data Card */}
-              <div className="relative">
-                 <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-200 to-indigo-200"></div>
-                 
-                 <div className="space-y-6 pl-8 relative">
-                    {/* Recipient */}
-                    <div className="relative group">
-                      <div className="absolute -left-[39px] top-1 w-5 h-5 rounded-full bg-blue-500 border-4 border-white shadow-md z-10 ring-1 ring-slate-100"></div>
-                      <p className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Recipient</p>
-                      <p className="text-xl font-bold text-slate-800">{result.recipient}</p>
-                    </div>
+              <div className="relative pl-6 border-l-2 border-slate-200 space-y-6">
+                 {/* Recipient */}
+                 <div>
+                   <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Recipient</label>
+                   <p className="text-xl font-bold text-slate-800">{result.recipient}</p>
+                 </div>
 
-                    {/* Address */}
-                    <div className="relative group">
-                       <div className="absolute -left-[39px] top-1 w-5 h-5 rounded-full bg-indigo-500 border-4 border-white shadow-md z-10 ring-1 ring-slate-100"></div>
-                       <p className="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Address</p>
-                       <p className="text-base text-slate-700 leading-relaxed bg-slate-50/80 p-4 rounded-xl border border-slate-100 font-medium">{result.address}</p>
+                 {/* Address */}
+                 <div>
+                    <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Detailed Address</label>
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 text-slate-700 font-medium leading-relaxed">
+                      {result.address}
                     </div>
+                 </div>
 
-                    {/* Grid for Pin/City */}
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative">
-                         <div className="absolute -left-[39px] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 border-4 border-white shadow-md z-10 ring-1 ring-slate-100"></div>
-                         <p className="text-xs text-slate-400 font-bold uppercase mb-1">PIN / ZIP</p>
-                         <p className="text-2xl font-mono font-bold text-slate-800 tracking-wider">{result.pin_code}</p>
-                       </div>
-                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                         <p className="text-xs text-slate-400 font-bold uppercase mb-1">City / Region</p>
-                         <p className="text-lg font-bold text-slate-800">{result.city}</p>
-                         <p className="text-xs font-semibold text-slate-500">{result.country}</p>
-                       </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold uppercase block mb-1">PIN / ZIP</label>
+                      <p className="text-lg font-mono font-bold text-blue-600">{result.pin_code}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Region</label>
+                      <p className="text-lg font-bold text-slate-800">{result.city}</p>
                     </div>
                  </div>
               </div>
 
-              {/* Sorting Result */}
-              <div className="mt-4 pt-6 border-t border-slate-100">
-                <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden group">
-                   <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                     <Scan className="w-32 h-32 transform rotate-12" />
-                   </div>
-                   
-                   <p className="text-emerald-100 text-xs font-bold uppercase tracking-wider mb-2">Routing Destination</p>
-                   <h3 className="text-3xl font-black mb-1 tracking-tight">{result.sorting_center_name}</h3>
-                   <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-lg text-sm font-mono mt-3 border border-white/30 font-bold shadow-sm">
+              {/* Sorting Result Card */}
+              <div className="mt-4 pt-6">
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden group">
+                   {/* Abstract tech lines */}
+                   <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+                   <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500 rounded-full blur-[50px] opacity-20"></div>
+
+                   <p className="relative text-blue-200 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                     <CheckCircle className="w-3 h-3" /> Routing Assigned
+                   </p>
+                   <h3 className="relative text-2xl font-black mb-1 tracking-tight text-white">{result.sorting_center_name}</h3>
+                   <div className="relative inline-block bg-white/10 backdrop-blur-sm px-3 py-1 rounded-md text-sm font-mono mt-3 border border-white/20 text-blue-100">
                      ID: {result.sorting_center_id}
                    </div>
                 </div>
