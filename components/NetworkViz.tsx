@@ -19,6 +19,12 @@ interface NetworkLink extends d3.SimulationLinkDatum<NetworkNode> {
   value: number;
 }
 
+interface Particle {
+  link: NetworkLink;
+  t: number; // 0 to 1 (progress along link)
+  speed: number;
+}
+
 const NetworkViz: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -37,7 +43,7 @@ const NetworkViz: React.FC = () => {
       .attr("viewBox", [0, 0, width, height])
       .attr("class", "w-full h-full");
 
-    // Define Filters & Gradients for "Glowing" effect
+    // Define Filters & Gradients
     const defs = svg.append("defs");
     
     // Glow Filter
@@ -47,16 +53,24 @@ const NetworkViz: React.FC = () => {
     feMerge.append("feMergeNode").attr("in", "coloredBlur");
     feMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    // Node Gradients
-    const createGradient = (id: string, color: string) => {
-      const grad = defs.append("radialGradient").attr("id", id);
-      grad.append("stop").attr("offset", "0%").style("stop-color", color).style("stop-opacity", "1");
-      grad.append("stop").attr("offset", "100%").style("stop-color", color).style("stop-opacity", "0.3");
-    };
+    // Grid Pattern
+    const pattern = defs.append("pattern")
+      .attr("id", "grid")
+      .attr("width", 40)
+      .attr("height", 40)
+      .attr("patternUnits", "userSpaceOnUse");
+    pattern.append("path")
+      .attr("d", "M 40 0 L 0 0 0 40")
+      .attr("fill", "none")
+      .attr("stroke", "#1e293b")
+      .attr("stroke-width", 1);
 
-    createGradient("grad-active", "#10b981"); // emerald
-    createGradient("grad-busy", "#f43f5e"); // rose
-    createGradient("grad-idle", "#94a3b8"); // slate
+    // Background Rect using Grid
+    svg.append("rect")
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .attr("fill", "url(#grid)")
+      .attr("opacity", 0.5);
 
     // Data
     const nodes: NetworkNode[] = [
@@ -92,23 +106,46 @@ const NetworkViz: React.FC = () => {
       { source: "HUB-LAX", target: "LOC-PS", value: 2 },
     ];
 
-    const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d) => d.target.type === 'LOCAL' ? 100 : 250))
-      .force("charge", d3.forceManyBody().strength(-500))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(50));
+    // Initialize Particles
+    const particles: Particle[] = [];
+    links.forEach(link => {
+      // Create 2-3 particles per link
+      const count = Math.floor(Math.random() * 2) + 1;
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          link,
+          t: Math.random(), // Start at random position
+          speed: 0.002 + Math.random() * 0.004 // Random speed
+        });
+      }
+    });
 
-    // Links
-    const link = svg.append("g")
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d) => d.target.type === 'LOCAL' ? 80 : 200))
+      .force("charge", d3.forceManyBody().strength(-400))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collide", d3.forceCollide().radius(40));
+
+    // Links Layer
+    const linkGroup = svg.append("g")
       .attr("class", "links")
       .selectAll("line")
       .data(links)
       .join("line")
       .attr("stroke", "#334155")
       .attr("stroke-width", d => Math.sqrt(d.value))
-      .attr("opacity", 0.6);
+      .attr("opacity", 0.4);
 
-    // Node Container
+    // Particles Layer
+    const particleGroup = svg.append("g").attr("class", "particles");
+    const particleCircles = particleGroup.selectAll("circle")
+      .data(particles)
+      .enter().append("circle")
+      .attr("r", 2.5)
+      .attr("fill", "#60a5fa")
+      .style("filter", "url(#glow)");
+
+    // Nodes Layer
     const nodeGroup = svg.append("g")
       .attr("class", "nodes")
       .selectAll("g")
@@ -119,9 +156,9 @@ const NetworkViz: React.FC = () => {
         .on("drag", dragged)
         .on("end", dragended));
 
-    // Outer glow ring
+    // Outer glow ring (Pulse animation)
     nodeGroup.append("circle")
-      .attr("r", d => d.type === 'HUB' ? 25 : 12)
+      .attr("r", d => d.type === 'HUB' ? 30 : 15)
       .attr("fill", "transparent")
       .attr("stroke", d => {
         if (d.status === 'active') return "#10b981";
@@ -129,53 +166,86 @@ const NetworkViz: React.FC = () => {
         return "#94a3b8";
       })
       .attr("stroke-width", 1)
-      .attr("stroke-dasharray", "3 3")
-      .attr("opacity", 0.5)
-      .append("animateTransform")
-        .attr("attributeName", "transform")
-        .attr("attributeType", "XML")
-        .attr("type", "rotate")
-        .attr("from", "0 0 0")
-        .attr("to", "360 0 0")
-        .attr("dur", "10s")
+      .attr("opacity", 0.3)
+      .append("animate")
+        .attr("attributeName", "r")
+        .attr("from", d => d.type === 'HUB' ? 20 : 10)
+        .attr("to", d => d.type === 'HUB' ? 35 : 18)
+        .attr("dur", "2s")
+        .attr("repeatCount", "indefinite");
+      
+    // Opacity pulse for the ring
+    nodeGroup.selectAll("circle")
+      .filter(":last-child") // select the ring we just appended
+      .append("animate")
+        .attr("attributeName", "opacity")
+        .attr("values", "0.6;0;0.6")
+        .attr("dur", "2s")
         .attr("repeatCount", "indefinite");
 
-    // Main Node
+    // Main Node Body
     nodeGroup.append("circle")
       .attr("r", d => d.type === 'HUB' ? 15 : 6)
+      .attr("fill", "#0f172a") // Dark slate background
+      .attr("stroke", d => {
+        if (d.status === 'active') return "#10b981"; // Emerald
+        if (d.status === 'busy') return "#f43f5e"; // Rose
+        return "#94a3b8"; // Slate
+      })
+      .attr("stroke-width", 2)
+      .style("filter", "url(#glow)")
+      .attr("class", "cursor-pointer transition-all hover:stroke-white")
+      .on("click", (event, d) => {
+        setSelectedNode(d);
+        event.stopPropagation();
+      });
+
+    // Inner Status Dot
+    nodeGroup.append("circle")
+      .attr("r", d => d.type === 'HUB' ? 4 : 2)
       .attr("fill", d => {
         if (d.status === 'active') return "#10b981";
         if (d.status === 'busy') return "#f43f5e";
         return "#94a3b8";
-      })
-      .style("filter", "url(#glow)")
-      .attr("stroke", "#0f172a")
-      .attr("stroke-width", 2)
-      .attr("class", "cursor-pointer transition-all")
-      .on("click", (event, d) => {
-        setSelectedNode(d);
-        event.stopPropagation();
       });
 
     // Labels
     nodeGroup.append("text")
       .text(d => d.type === 'HUB' ? d.label.toUpperCase() : '')
       .attr("text-anchor", "middle")
-      .attr("dy", -30)
-      .attr("fill", "#94a3b8")
+      .attr("dy", -35)
+      .attr("fill", "#e2e8f0")
       .attr("font-size", "10px")
       .attr("font-weight", "bold")
-      .attr("letter-spacing", "1px");
+      .attr("letter-spacing", "1px")
+      .style("text-shadow", "0 2px 4px rgba(0,0,0,0.8)");
 
     simulation.on("tick", () => {
-      link
+      // Update Lines
+      linkGroup
         .attr("x1", d => (d.source as NetworkNode).x!)
         .attr("y1", d => (d.source as NetworkNode).y!)
         .attr("x2", d => (d.target as NetworkNode).x!)
         .attr("y2", d => (d.target as NetworkNode).y!);
 
+      // Update Nodes
       nodeGroup
         .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      // Update Particles
+      particleCircles
+        .attr("cx", d => {
+          d.t += d.speed;
+          if (d.t > 1) d.t = 0;
+          const sx = (d.link.source as NetworkNode).x!;
+          const tx = (d.link.target as NetworkNode).x!;
+          return sx + (tx - sx) * d.t;
+        })
+        .attr("cy", d => {
+          const sy = (d.link.source as NetworkNode).y!;
+          const ty = (d.link.target as NetworkNode).y!;
+          return sy + (ty - sy) * d.t;
+        });
     });
 
     function dragstarted(event: any, d: any) {
@@ -202,29 +272,33 @@ const NetworkViz: React.FC = () => {
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6">
-      <div className="flex-1 bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 overflow-hidden relative group">
-         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+      <div className="flex-1 bg-slate-950 rounded-3xl shadow-2xl border border-slate-800 overflow-hidden relative group">
+         {/* Top Gradient Line */}
+         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500"></div>
          
          <div className="absolute top-6 left-6 z-10 pointer-events-none">
            <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-             <Database className="w-6 h-6 text-blue-500" />
+             <Database className="w-6 h-6 text-cyan-400" />
              NETWORK TOPOLOGY
            </h2>
            <p className="text-slate-400 text-xs font-mono mt-1">LIVE TRAFFIC MONITORING /// NODE_STATUS_ACTIVE</p>
          </div>
          
          {/* Graph Container */}
-         <div ref={containerRef} className="w-full h-full cursor-move bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
+         <div ref={containerRef} className="w-full h-full cursor-move bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
            <svg ref={svgRef} className="w-full h-full"></svg>
          </div>
 
          {/* Legend */}
-         <div className="absolute bottom-6 right-6 bg-slate-800/90 backdrop-blur p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-2">
+         <div className="absolute bottom-6 right-6 bg-slate-900/90 backdrop-blur-md p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-2">
            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></span> OPTIMAL
            </div>
            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
              <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse"></span> HIGH LOAD
+           </div>
+           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+             <span className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_10px_#60a5fa]"></span> DATA PACKET
            </div>
          </div>
       </div>
@@ -232,13 +306,13 @@ const NetworkViz: React.FC = () => {
       {/* Info Panel */}
       <div className="w-full lg:w-80 flex flex-col gap-4">
         {/* Status Card */}
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden border border-slate-700">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <Zap className="w-24 h-24" />
           </div>
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/10">
+              <div className="p-2 bg-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-500/20 text-blue-400">
                 <Activity className="w-5 h-5" />
               </div>
               <h3 className="font-bold text-lg">System Metrics</h3>
@@ -303,9 +377,9 @@ const NetworkViz: React.FC = () => {
 };
 
 const MetricRow = ({ label, value }: { label: string, value: string }) => (
-  <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-white/5">
-    <span className="text-sm font-medium text-indigo-100">{label}</span>
-    <span className="font-bold font-mono">{value}</span>
+  <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-white/5">
+    <span className="text-sm font-medium text-slate-400">{label}</span>
+    <span className="font-bold font-mono text-white">{value}</span>
   </div>
 );
 

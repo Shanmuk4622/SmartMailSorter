@@ -60,44 +60,80 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
     let frames = 0;
     const logs = [
-      "Initializing Neural Network...",
-      "Loading Tensor Weights...",
-      "Detecting Edges...",
-      "Extracting ROI...",
-      "Normalizing Inputs...",
-      "Performing OCR Inference...",
-      "Classifying Region...",
-      "Confidence Analysis..."
+      "Initializing Input Layer...",
+      "Convolution Block 1 (3x3)...",
+      "Pooling Layer (Max)...",
+      "Convolution Block 2 (5x5)...",
+      "Feature Extraction...",
+      "Flattening Vectors...",
+      "Dense Layer (ReLU)...",
+      "Softmax Classification..."
     ];
 
     const animate = () => {
       // Clear semi-transparently for trail effect
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // Slightly darker for better visibility
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      if (frames % 10 === 0) {
-        // Draw random bounding boxes to simulate object detection
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        const w = Math.random() * 100 + 50;
-        const h = Math.random() * 30 + 10;
-        
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, w, h);
-        
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
-        ctx.fillRect(x, y, w, h);
+      // 1. Sliding Convolution Kernel (The "Scanner" Box)
+      const kernelSize = 60;
+      const speed = 4;
+      const scanX = (frames * speed) % (canvas.width + kernelSize) - kernelSize;
+      const scanY = (Math.floor((frames * speed) / canvas.width) * kernelSize / 2) % canvas.height;
 
-        // Simulated confidence text
+      ctx.strokeStyle = '#00ffcc';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.strokeRect(scanX, scanY, kernelSize, kernelSize);
+      ctx.setLineDash([]);
+      
+      // Kernel fill
+      ctx.fillStyle = 'rgba(0, 255, 204, 0.1)';
+      ctx.fillRect(scanX, scanY, kernelSize, kernelSize);
+
+      // 2. Random Bounding Boxes (Object Detection Candidates)
+      if (frames % 15 === 0) {
+        const x = Math.random() * (canvas.width - 100);
+        const y = Math.random() * (canvas.height - 50);
+        const w = Math.random() * 100 + 40;
+        const h = Math.random() * 30 + 20;
+        
+        // Draw bracket corners only
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 1.5;
+        
+        ctx.beginPath();
+        // Top Left
+        ctx.moveTo(x + 10, y); ctx.lineTo(x, y); ctx.lineTo(x, y + 10);
+        // Top Right
+        ctx.moveTo(x + w - 10, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + 10);
+        // Bottom Left
+        ctx.moveTo(x, y + h - 10); ctx.lineTo(x, y + h); ctx.lineTo(x + 10, y + h);
+        // Bottom Right
+        ctx.moveTo(x + w - 10, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - 10);
+        ctx.stroke();
+
+        // Label
         ctx.fillStyle = '#00ff00';
         ctx.font = '10px monospace';
-        ctx.fillText(`CONF: ${(Math.random() * 0.9 + 0.1).toFixed(2)}`, x, y - 5);
+        const conf = (Math.random() * 0.4 + 0.5).toFixed(2);
+        ctx.fillText(`txt_region: ${conf}`, x, y - 5);
       }
 
-      // Update pseudo-log
-      if (frames % 40 === 0 && frames / 40 < logs.length) {
-        setCnnLog(logs[Math.floor(frames / 40)]);
+      // 3. Matrix Rain / Activation Map Points
+      if (frames % 2 === 0) {
+        for(let i=0; i<5; i++) {
+           const px = Math.random() * canvas.width;
+           const py = Math.random() * canvas.height;
+           ctx.fillStyle = Math.random() > 0.5 ? '#3b82f6' : '#10b981';
+           ctx.fillRect(px, py, 2, 2);
+        }
+      }
+
+      // Update pseudo-log based on frame progress
+      if (frames % 60 === 0) {
+        const logIndex = Math.floor(frames / 60) % logs.length;
+        setCnnLog(logs[logIndex]);
       }
 
       frames++;
@@ -157,7 +193,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const handleScan = async () => {
     if (!processedImage) return;
     setIsProcessing(true);
-    setCnnLog("Initializing...");
+    setCnnLog("Initializing Input Layer...");
     setError(null);
     const start = Date.now();
 
@@ -293,8 +329,16 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                     <div className="absolute left-0 w-full h-1 bg-green-400 shadow-[0_0_15px_rgba(74,222,128,0.8)] animate-scan pointer-events-none"></div>
                     
                     {/* Tech Text Overlay */}
-                    <div className="absolute bottom-4 left-4 font-mono text-xs text-green-400 bg-black/80 px-3 py-1 rounded border border-green-500/30">
-                      <span className="animate-pulse">●</span> {cnnLog}
+                    <div className="absolute bottom-4 left-4 font-mono text-xs text-green-400 bg-black/80 px-3 py-1 rounded border border-green-500/30 shadow-lg shadow-green-500/20 backdrop-blur-sm">
+                      <span className="animate-pulse inline-block mr-2">●</span>
+                      <span className="tracking-wide uppercase">{cnnLog}</span>
+                    </div>
+
+                    {/* Matrix decorative numbers top right */}
+                    <div className="absolute top-4 right-4 text-[10px] font-mono text-green-500/50 leading-none pointer-events-none text-right">
+                       {Array.from({length: 4}).map((_, i) => (
+                         <div key={i}>{Math.random().toString(2).substring(2, 10)}</div>
+                       ))}
                     </div>
                   </>
                 )}
