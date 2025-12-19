@@ -1,16 +1,60 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import type { Plugin } from 'vite';
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-  const env = loadEnv(mode, (process as any).cwd(), '');
-  return {
-    plugins: [react()],
-    define: {
-      // Polyfill process.env.API_KEY for the Gemini SDK
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
-    }
-  };
+	const env = loadEnv(mode, process.cwd(), '');
+	const HF_KEY = env.HF_API_KEY || env.HF_KEY || '';
+
+	const hfProxyPlugin = (): Plugin => ({
+		name: 'vite:hf-proxy',
+		configureServer(server) {
+			server.middlewares.use('/api/hf', async (req: any, res: any) => {
+				try {
+					const targetPath = (req.url || '').replace(/^\/api\/hf/, '');
+					const target = `https://api-inference.huggingface.co${targetPath}`;
+
+					// Collect request body
+					const chunks: Uint8Array[] = [];
+					for await (const chunk of req) chunks.push(chunk);
+					const body = chunks.length ? Buffer.concat(chunks) : undefined;
+
+					// Build headers and inject HF key from local env (dev only)
+					const headers: Record<string, string> = {};
+					if (req.headers['content-type']) headers['content-type'] = String(req.headers['content-type']);
+					if (HF_KEY) headers['authorization'] = `Bearer ${HF_KEY}`;
+
+					const fetchRes = await fetch(target, {
+						method: req.method,
+						headers,
+						body
+					});
+
+					res.statusCode = fetchRes.status;
+					fetchRes.headers.forEach((value, key) => {
+						try { res.setHeader(key, value); } catch (e) {}
+					});
+					res.setHeader('Access-Control-Allow-Origin', '*');
+
+					const arrayBuffer = await fetchRes.arrayBuffer();
+					res.end(Buffer.from(arrayBuffer));
+				} catch (err) {
+					console.error('[vite:hf-proxy] proxy error', err);
+					try { res.statusCode = 502; res.end('Proxy error'); } catch (e) {}
+				}
+			});
+		}
+	});
+
+	return {
+		plugins: [react(), hfProxyPlugin()],
+		define: {
+			'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
+			'process.env.HF_API_KEY': JSON.stringify(HF_KEY)
+		},
+		server: {
+			port: 5173
+		}
+	};
 });
+

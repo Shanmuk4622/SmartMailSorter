@@ -18,3 +18,6 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ve1GE9xbhyFl80fFx-66Vk
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+Hugging Face notes:
+- If you want to use Hugging Face models (e.g., Llama-3.2-Vision) set `HF_API_KEY` in your `.env.local` (or use the provided example `.env.example`). Get a token from https://huggingface.co/settings/tokens and create a new "Read" or "Inference" token. The app will read `HF_API_KEY` at build time.

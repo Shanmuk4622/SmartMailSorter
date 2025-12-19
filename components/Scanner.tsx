@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MailData, ProcessingOptions, ScanResult } from '../types';
-import { extractMailData } from '../geminiService';
+import { extractMailData, Provider } from '../aiService';
 import { processImage } from '../imageUtils';
 import { Loader2, Upload, Scan, RotateCcw, CheckCircle, AlertTriangle, ArrowRight, Image as ImageIcon, Sparkles, Cpu, Crosshair } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -22,6 +22,8 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     highContrast: false,
     denoise: false
   });
+  const [provider, setProvider] = useState<Provider>('gemini');
+  const [model, setModel] = useState<string>('gemini-3-flash-preview');
   const [cnnLog, setCnnLog] = useState<string>("");
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -198,7 +200,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     const start = Date.now();
 
     try {
-      const data = await extractMailData(processedImage);
+      const data = await extractMailData(processedImage, { provider, model });
       setResult(data);
       
       const safeConfidence = Math.round(data.confidence);
@@ -366,8 +368,8 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
               )}
 
               {/* Controls */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-3">
+                <div className="flex items-center justify-between mb-0">
                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pre-Processing</label>
                    <Cpu className="w-4 h-4 text-slate-300" />
                 </div>
@@ -386,6 +388,39 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                   >
                     High Contrast
                   </button>
+                </div>
+
+                {/* Model Selection */}
+                <div className="pt-2 border-t border-slate-100/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Model</label>
+                    <span className="text-xs text-slate-400">Choose inference model</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={`${provider}:${model}`}
+                      onChange={(e) => {
+                        const [p, m] = e.target.value.split(':');
+                        setProvider(p as Provider);
+                        setModel(m || (p === 'gemini' ? 'gemini-3-flash-preview' : 'meta-llama/Llama-3.2-Vision'));
+                      }}
+                      disabled={isProcessing}
+                      className="flex-1 py-2 px-3 rounded-lg border bg-white text-sm"
+                    >
+                      <option value="gemini:gemini-3-flash-preview">Google Gemini — gemini-3-flash-preview</option>
+                      <option value="huggingface:meta-llama/Llama-3.2-Vision">Hugging Face — Llama-3.2-Vision</option>
+                    </select>
+
+                    {/* Allow custom model id entry */}
+                    <input
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      disabled={isProcessing}
+                      className="w-64 py-2 px-3 rounded-lg border bg-white text-sm"
+                      placeholder="Custom model id (optional)"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">Hugging Face models require an `HF_API_KEY` set in your environment. See README for details.</p>
                 </div>
               </div>
 
