@@ -1,8 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import { MailData } from './types';
 
-// Initialize the client. API_KEY is expected to be in the environment.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize the client. Prefer Vite-exposed env vars for client builds.
+const GEMINI_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_API_KEY || (import.meta as any).env?.API_KEY || '';
+const ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
 
 export const extractMailData = async (base64Image: string): Promise<MailData> => {
   console.log("[GeminiService] Starting extraction process...");

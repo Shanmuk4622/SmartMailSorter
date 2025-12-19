@@ -49,6 +49,9 @@ export default defineConfig(({ mode }) => {
 	return {
 		plugins: [react(), hfProxyPlugin()],
 		define: {
+			// Provide a minimal `process` shim for browser bundles to avoid
+			// runtime ReferenceError when dependencies reference `process`.
+			'process': JSON.stringify({ env: {} }),
 			'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
 			'process.env.HF_API_KEY': JSON.stringify(HF_KEY)
 		},
