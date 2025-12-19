@@ -57,6 +57,35 @@ const dataURLToBlob = (dataURL: string) => {
 // the RENDER_SCAN_URL env var or falls back to a placeholder you should replace.
 export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?: string) {
   const RENDER_SCAN_URL = renderUrl || (process as any)?.env?.RENDER_SCAN_URL || 'https://spindlier-diamond-remotely.ngrok-free.dev/scan';
+
+  // If the configured URL points to our internal serverless proxy (starts with /api),
+  // send a small JSON payload containing the data URL. This avoids multipart parsing
+  // differences between browser -> Vercel and the external Render/ngrok service.
+  if (RENDER_SCAN_URL.startsWith('/api') || RENDER_SCAN_URL.includes(window.location.hostname) && RENDER_SCAN_URL.endsWith('/api/scan')) {
+    const res = await fetch(RENDER_SCAN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl })
+    });
+    const rawText = await res.text();
+    console.log('[aiService] Render proxy (server) response status:', res.status, res.statusText);
+    console.log('[aiService] Render proxy (server) raw response body:', rawText);
+    try {
+      if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+        (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, status: res.status, statusText: res.statusText } }));
+      }
+    } catch (e: any) { /* ignore */ }
+
+    if (!res.ok) throw new Error(`Render proxy failed: ${res.status} ${res.statusText} ${rawText}`);
+    try {
+      const json = JSON.parse(rawText || '{}');
+      return json;
+    } catch (e: any) {
+      throw new Error(`Render proxy returned invalid JSON: ${String(e?.message ?? e)} -- raw: ${rawText}`);
+    }
+  }
+
+  // Otherwise send multipart/form-data directly to the external Render/ngrok URL
   const blob = dataURLToBlob(dataUrl);
   const file = new File([blob], 'envelope.png', { type: blob.type });
 
@@ -253,36 +282,28 @@ export const extractMailData = async (
   }
 
   // Default: Gemini
-  if (!geminiClient) throw new Error('Gemini client not initialized. Set API_KEY in env.');
-
+  // For deployed apps we proxy Gemini calls to a serverless function so API keys
+  // remain on the server. The serverless endpoint should be implemented as
+  // `/api/gemini` and will call Google GenAI using a server-side key.
   try {
-    console.log('[aiService] Sending request to Gemini model', model || 'gemini-3-flash-preview');
-    const response = await geminiClient.models.generateContent({
-      model: model || 'gemini-3-flash-preview',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/png',
-              data: cleanBase64
-            }
-          },
-          {
-            text: `Analyze this image of a mail envelope. Perform Optical Character Recognition (OCR) to extract recipient and address details. Based on the extracted PIN/ZIP code and City, classify this mail item into a logical Sorting Center. Return the result purely as a valid JSON object with the following structure. Do not use markdown code blocks. { "recipient": "string", "address": "string", "pin_code": "string", "city": "string", "country": "string", "sorting_center_id": "string", "sorting_center_name": "string", "confidence": number } IMPORTANT: Return "confidence" as an integer between 0 and 100.`
-          }
-        ]
-      },
-      config: { temperature: 0.1 }
+    console.log('[aiService] Routing request to server-side Gemini proxy', model || 'gemini-3-flash-preview');
+    const resp = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || 'gemini-3-flash-preview', imageBase64: cleanBase64 })
     });
-
-    let jsonText = response.text || '{}';
+    const text = await resp.text();
+    if (!resp.ok) {
+      console.error('[aiService] Gemini proxy error:', resp.status, text);
+      throw new Error(`Gemini proxy failed: ${resp.status} ${text}`);
+    }
+    let jsonText = text || '{}';
     if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
     else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
-
     const parsed = JSON.parse(jsonText.trim());
     return finalize(parsed);
   } catch (error: any) {
-    console.error('[aiService] Gemini extraction failed:', error);
+    console.error('[aiService] Gemini extraction (proxy) failed:', error);
     throw error;
   }
 };
