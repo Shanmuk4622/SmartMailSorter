@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User } from 'lucide-react';
+import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User, BarChart3 } from 'lucide-react';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
 import NetworkViz from './components/NetworkViz';
+import Analytics from './components/Analytics';
 import { AppView, ScanResult } from './types';
 import { supabase } from './supabaseClient';
+import './testMapData'; // Import test data utilities
+import './csvImporter'; // Import CSV import utilities
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
@@ -122,6 +125,15 @@ const App: React.FC = () => {
             color="bg-amber-500"
             compact={isCompactSidebar}
           />
+          <NavButton 
+            active={currentView === AppView.ANALYTICS} 
+            onClick={() => { setCurrentView(AppView.ANALYTICS); setIsMobileMenuOpen(false); }} 
+            icon={<BarChart3 className="w-5 h-5" />}
+            label="Analytics"
+            description="Data & Reports"
+            color="bg-indigo-500"
+            compact={isCompactSidebar}
+          />
         </nav>
 
         <div className="p-6 border-t border-indigo-900/30 bg-[#0f172a]/50">
@@ -201,6 +213,7 @@ const App: React.FC = () => {
               {currentView === AppView.NETWORK && <NetworkViz />}
               {currentView === AppView.SCANNER && <Scanner onScanComplete={handleScanComplete} />}
               {currentView === AppView.HISTORY && <HistoryLog history={history} />}
+              {currentView === AppView.ANALYTICS && <Analytics />}
             </div>
           </div>
         </div>

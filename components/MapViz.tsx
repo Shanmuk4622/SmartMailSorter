@@ -1,15 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as d3 from 'd3';
-import { Radio, Crosshair, Wifi, Maximize2, X, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
+import { Radio, Crosshair, Wifi, Maximize2, X, ZoomIn, ZoomOut, RefreshCw, Map as MapIcon, Network } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { sampleData, sortingCenterLocations } from '../sampleData';
+import { ScanResult } from '../types';
+import GeographicMap from './GeographicMap';
 
 interface MapNode {
   id: string;
-  x: number; // 0-100 relative coordinate
-  y: number; // 0-100 relative coordinate
+  x: number; // 0-100 relative coordinate or actual longitude
+  y: number; // 0-100 relative coordinate or actual latitude
   label: string;
   status: 'active' | 'busy' | 'idle';
   traffic: number; // 0-100 load
+  city?: string;
+  state?: string;
+  scanCount?: number;
+  lastActivity?: number;
 }
 
 const MapViz: React.FC = () => {
@@ -28,28 +36,312 @@ const MapViz: React.FC = () => {
   const currentTransformRef = useRef<any>(d3.zoomIdentity);
   const zoomLayerElRef = useRef<SVGGElement | null>(null);
 
-  // Geographical Data (Abstracted positions)
-  const nodes: MapNode[] = [
-    { id: 'DL', x: 30, y: 20, label: 'North Hub', status: 'busy', traffic: 85 },
-    { id: 'MH', x: 25, y: 55, label: 'West Hub', status: 'active', traffic: 45 },
-    { id: 'KA', x: 35, y: 75, label: 'South Hub', status: 'active', traffic: 60 },
-    { id: 'TN', x: 45, y: 80, label: 'Coastal Hub', status: 'idle', traffic: 10 },
-    { id: 'WB', x: 70, y: 45, label: 'East Hub', status: 'active', traffic: 30 },
-    { id: 'AS', x: 85, y: 35, label: 'N.East Hub', status: 'active', traffic: 25 },
-    { id: 'TS', x: 40, y: 60, label: 'Central Hub', status: 'busy', traffic: 78 },
-  ];
+  const [nodes, setNodes] = useState<MapNode[]>([]);
+  const [scanData, setScanData] = useState<ScanResult[]>([]);
+  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
+  const [mapView, setMapView] = useState<'abstract' | 'geographic'>('geographic'); // Default to geographic
+  
+  // Fetch and process real data
+  const fetchMapData = async () => {
+    try {
+      console.log('🗺️  Fetching map data from Supabase...');
+      const { data: scans, error } = await supabase
+        .from('mail_scans')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500);
+        
+      let scansToProcess: ScanResult[];
+      
+      if (error || !scans || scans.length === 0) {
+        console.log('🗺️  Using sample data for map visualization');
+        scansToProcess = sampleData;
+      } else {
+        console.log(`🗺️  Processing ${scans.length} real scans for map...`);
+        // Convert database records to ScanResult format
+        scansToProcess = scans.map(record => ({
+          id: record.id,
+          timestamp: new Date(record.created_at).getTime(),
+          data: {
+            recipient: record.recipient,
+            address: record.address,
+            pin_code: record.pin_code,
+            city: record.city,
+            state: record.state,
+            country: record.country,
+            sorting_center_id: record.sorting_center_id,
+            sorting_center_name: record.sorting_center_name,
+            confidence: record.confidence / 100
+          },
+          status: record.status,
+          processingTimeMs: 2000 // Default since not stored
+        } as ScanResult));
+      }
+      
+      setScanData(scansToProcess);
+      
+      // Process scans to create dynamic map nodes
+      const centerMap = new Map<string, {
+        id: string;
+        name: string;
+        city: string;
+        state?: string;
+        scanCount: number;
+        successCount: number;
+        lastActivity: number;
+        lat?: number;
+        lng?: number;
+      }>();
+      
+      scansToProcess.forEach(scan => {
+        if (scan.data?.sorting_center_id) {
+          const centerId = scan.data.sorting_center_id;
+          if (!centerMap.has(centerId)) {
+            // Try to get location from sample data
+            const location = sortingCenterLocations.find(loc => loc.id === centerId);
+            centerMap.set(centerId, {
+              id: centerId,
+              name: scan.data.sorting_center_name || centerId,
+              city: scan.data.city,
+              state: scan.data.state,
+              scanCount: 0,
+              successCount: 0,
+              lastActivity: 0,
+              lat: location?.lat,
+              lng: location?.lng
+            });
+          }
+          
+          const center = centerMap.get(centerId)!;
+          center.scanCount++;
+          if (scan.status === 'completed') center.successCount++;
+          center.lastActivity = Math.max(center.lastActivity, scan.timestamp || 0);
+        }
+      });
+      
+      // Convert to map nodes with dynamic positioning
+      const mapNodes: MapNode[] = Array.from(centerMap.values()).map((center, index) => {
+        // Calculate traffic based on recent activity
+        const hoursAgo = (Date.now() - center.lastActivity) / (1000 * 60 * 60);
+        let status: 'active' | 'busy' | 'idle';
+        let traffic: number;
+        
+        if (hoursAgo < 1) {
+          status = center.scanCount > 20 ? 'busy' : 'active';
+          traffic = Math.min(100, center.scanCount * 5);
+        } else if (hoursAgo < 6) {
+          status = 'active';
+          traffic = Math.min(70, center.scanCount * 3);
+        } else {
+          status = 'idle';
+          traffic = Math.min(30, center.scanCount);
+        }
+        
+        // Use geographic coordinates if available, otherwise distribute
+        let x, y;
+        if (center.lat && center.lng) {
+          // Convert lat/lng to relative coordinates (simplified projection)
+          x = ((center.lng + 120) / 60) * 100; // Rough conversion for US
+          y = ((45 - center.lat) / 20) * 100;   // Rough conversion for US
+        } else {
+          // Distribute evenly if no coordinates
+          x = 20 + (index % 4) * 20;
+          y = 20 + Math.floor(index / 4) * 20;
+        }
+        
+        return {
+          id: center.id,
+          x: Math.max(5, Math.min(95, x)),
+          y: Math.max(5, Math.min(95, y)),
+          label: center.name,
+          status,
+          traffic,
+          city: center.city,
+          state: center.state,
+          scanCount: center.scanCount,
+          lastActivity: center.lastActivity
+        };
+      });
+      
+      setNodes(mapNodes);
+      setLastUpdate(Date.now());
+      
+    } catch (error) {
+      console.error('Error fetching map data:', error);
+      // Fallback to sample locations if error
+      const fallbackNodes = sortingCenterLocations.map((loc, index) => ({
+        id: loc.id,
+        x: ((loc.lng + 120) / 60) * 100,
+        y: ((45 - loc.lat) / 20) * 100,
+        label: loc.name,
+        status: loc.status as 'active' | 'busy' | 'idle',
+        traffic: loc.traffic,
+        city: loc.city,
+        state: loc.state,
+        scanCount: Math.floor(Math.random() * 50) + 10,
+        lastActivity: Date.now() - Math.random() * 86400000
+      }));
+      setNodes(fallbackNodes);
+    }
+  };
+  
+  // Process geographic centers for the map
+  const geographicCenters = React.useMemo(() => {
+    console.log('🗺️ Processing geographic centers from scanData:', scanData.length, 'scans');
+    const centerMap = new Map<string, {
+      id: string;
+      name: string;
+      city: string;
+      state?: string;
+      scanCount: number;
+      successCount: number;
+      lastActivity: number;
+      lat: number;
+      lng: number;
+    }>();
+    
+    scanData.forEach(scan => {
+      console.log('🗺️ Processing scan:', scan);
+      if (scan.data?.sorting_center_id) {
+        const centerId = scan.data.sorting_center_id;
+        console.log('🗺️ Found center ID:', centerId);
+        if (!centerMap.has(centerId)) {
+          // Try to get location from sample data
+          const location = sortingCenterLocations.find(loc => loc.id === centerId);
+          console.log('🗺️ Found location for center:', location);
+          if (location) {
+            centerMap.set(centerId, {
+              id: centerId,
+              name: scan.data.sorting_center_name || centerId,
+              city: scan.data.city,
+              state: scan.data.state,
+              scanCount: 0,
+              successCount: 0,
+              lastActivity: 0,
+              lat: location.lat,
+              lng: location.lng
+            });
+          }
+        }
+        
+        const center = centerMap.get(centerId);
+        if (center) {
+          center.scanCount++;
+          if (scan.status === 'completed') center.successCount++;
+          center.lastActivity = Math.max(center.lastActivity, scan.timestamp || 0);
+        }
+      }
+    });
+    
+    // Convert to geographic centers
+    const result = Array.from(centerMap.values()).map(center => {
+      const hoursAgo = (Date.now() - center.lastActivity) / (1000 * 60 * 60);
+      let status: 'active' | 'busy' | 'idle';
+      let traffic: number;
+      
+      if (hoursAgo < 1) {
+        status = center.scanCount > 20 ? 'busy' : 'active';
+        traffic = Math.min(100, center.scanCount * 5);
+      } else if (hoursAgo < 6) {
+        status = 'active';
+        traffic = Math.min(70, center.scanCount * 3);
+      } else {
+        status = 'idle';
+        traffic = Math.min(30, center.scanCount);
+      }
+      
+      return {
+        id: center.id,
+        name: center.name,
+        city: center.city,
+        state: center.state,
+        lat: center.lat,
+        lng: center.lng,
+        scanCount: center.scanCount,
+        lastActivity: center.lastActivity,
+        status,
+        traffic
+      };
+    });
+    
+    console.log('🗺️ Final geographic centers result:', result);
+    return result;
+  }, [scanData]);
+  
+  // Initial data fetch and periodic updates
+  useEffect(() => {
+    fetchMapData();
+    
+    // Update every 15 seconds for real-time feel
+    const interval = setInterval(() => {
+      console.log('⏰ Periodic map data refresh...');
+      fetchMapData();
+    }, 15000);
+    
+    // Real-time subscription
+    const subscription = supabase
+      .channel('mail_scans_map')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mail_scans'
+      }, (payload) => {
+        console.log('🗺️  Real-time update received (Map):', payload.eventType);
+        fetchMapData();
+      })
+      .subscribe((status) => {
+        console.log('📡 Map subscription status:', status);
+      });
+    
+    return () => {
+      clearInterval(interval);
+      subscription.unsubscribe();
+    };
+  }, []);
 
-  const links = [
-    { source: 'DL', target: 'MH' },
-    { source: 'DL', target: 'WB' },
-    { source: 'MH', target: 'KA' },
-    { source: 'MH', target: 'TS' },
-    { source: 'KA', target: 'TN' },
-    { source: 'KA', target: 'TS' },
-    { source: 'TS', target: 'WB' },
-    { source: 'WB', target: 'AS' },
-    { source: 'DL', target: 'TS' },
-  ];
+  // Generate dynamic links based on nodes
+  const links = React.useMemo(() => {
+    if (nodes.length < 2) return [];
+    
+    const generatedLinks = [];
+    const activeNodes = nodes.filter(n => n.status !== 'idle');
+    
+    // Connect high-traffic nodes to each other
+    for (let i = 0; i < activeNodes.length; i++) {
+      for (let j = i + 1; j < activeNodes.length; j++) {
+        const node1 = activeNodes[i];
+        const node2 = activeNodes[j];
+        
+        // Connect if both have significant traffic and are relatively close
+        const distance = Math.sqrt(Math.pow(node1.x - node2.x, 2) + Math.pow(node1.y - node2.y, 2));
+        if (distance < 50 && (node1.traffic > 30 || node2.traffic > 30)) {
+          generatedLinks.push({
+            source: node1.id,
+            target: node2.id
+          });
+        }
+      }
+    }
+    
+    // Also create some hub connections
+    const busyNodes = nodes.filter(n => n.status === 'busy');
+    busyNodes.forEach(busyNode => {
+      const nearbyActive = nodes.filter(n => 
+        n.status === 'active' && 
+        n.id !== busyNode.id &&
+        Math.sqrt(Math.pow(n.x - busyNode.x, 2) + Math.pow(n.y - busyNode.y, 2)) < 40
+      );
+      
+      nearbyActive.slice(0, 2).forEach(nearbyNode => {
+        generatedLinks.push({
+          source: busyNode.id,
+          target: nearbyNode.id
+        });
+      });
+    });
+    
+    return generatedLinks;
+  }, [nodes]);
 
   // Handle Resize (including full screen resizes)
   useEffect(() => {
@@ -678,8 +970,14 @@ const MapViz: React.FC = () => {
               }}></div>
             </div>
 
-            {/* 2. Abstract Map SVG */}
-            <svg ref={svgRef} className="w-full h-full relative z-10" />
+            {/* 2. Conditional Map Content */}
+            {mapView === 'geographic' ? (
+              <div className="w-full h-full relative z-10">
+                <GeographicMap centers={geographicCenters} />
+              </div>
+            ) : (
+              <svg ref={svgRef} className="w-full h-full relative z-10" />
+            )}
 
             {/* 3. Tech Overlay UI */}
             <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
@@ -726,14 +1024,43 @@ const MapViz: React.FC = () => {
           </>
         )}
 
-        {/* Expand button - always visible */}
-        <button
-          aria-label="Expand map"
-          onClick={(e) => { e.stopPropagation(); animateExpandToggle(true); }}
-          className="absolute top-4 right-4 z-50 p-3 rounded-lg transition-colors border bg-slate-800/70 text-slate-100 hover:bg-slate-700 border-slate-700"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </button>
+        {/* Controls - always visible */}
+        <div className="absolute top-4 right-4 z-50 flex gap-2">
+          {/* View Toggle */}
+          <div className="flex items-center bg-slate-800/70 backdrop-blur-sm rounded-lg border border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setMapView('geographic')}
+              className={`px-2 py-2 text-xs transition-colors flex items-center gap-1 ${
+                mapView === 'geographic' 
+                  ? 'bg-green-600 text-white' 
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700'
+              }`}
+              title="Geographic View"
+            >
+              <MapIcon className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => setMapView('abstract')}
+              className={`px-2 py-2 text-xs transition-colors flex items-center gap-1 ${
+                mapView === 'abstract' 
+                  ? 'bg-purple-600 text-white' 
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700'
+              }`}
+              title="Abstract View"
+            >
+              <Network className="w-3 h-3" />
+            </button>
+          </div>
+          
+          {/* Expand button */}
+          <button
+            aria-label="Expand map"
+            onClick={(e) => { e.stopPropagation(); animateExpandToggle(true); }}
+            className="p-3 rounded-lg transition-colors border bg-slate-800/70 text-slate-100 hover:bg-slate-700 border-slate-700"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Full Screen Portal */}
@@ -767,11 +1094,17 @@ const MapViz: React.FC = () => {
               }}></div>
             </div>
 
-            {/* 2. Full Screen SVG */}
-            <svg 
-              ref={isExpanded ? svgRef : undefined} 
-              className="w-full h-full relative z-10" 
-            />
+            {/* 2. Conditional Map Content */}
+            {mapView === 'geographic' ? (
+              <div className="w-full h-full relative z-10">
+                <GeographicMap centers={geographicCenters} />
+              </div>
+            ) : (
+              <svg 
+                ref={isExpanded ? svgRef : undefined} 
+                className="w-full h-full relative z-10" 
+              />
+            )}
 
             {/* Close Button */}
             <button
@@ -797,10 +1130,30 @@ const MapViz: React.FC = () => {
             {/* 4a. Fullscreen Toolbar */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-[min(95%,1200px)] px-4 py-2 bg-white/5 backdrop-blur-md rounded-xl border border-white/10 flex items-center gap-3 pointer-events-auto">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-200 font-semibold">Filters</label>
-                <button onClick={() => { setShowBusyOnly(s => !s); }} className={`px-2 py-1 rounded ${showBusyOnly ? 'bg-rose-500 text-white' : 'bg-white/5 text-slate-200'}`}>Busy</button>
-                <button onClick={() => { setShowActiveOnly(s => !s); }} className={`px-2 py-1 rounded ${showActiveOnly ? 'bg-emerald-500 text-white' : 'bg-white/5 text-slate-200'}`}>Active</button>
+                <label className="text-xs text-slate-200 font-semibold">View</label>
+                <button 
+                  onClick={() => setMapView('geographic')} 
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs ${mapView === 'geographic' ? 'bg-blue-500 text-white' : 'bg-white/5 text-slate-200'}`}
+                >
+                  <MapIcon className="w-3 h-3" />
+                  Geographic
+                </button>
+                <button 
+                  onClick={() => setMapView('abstract')} 
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs ${mapView === 'abstract' ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-200'}`}
+                >
+                  <Network className="w-3 h-3" />
+                  Abstract
+                </button>
               </div>
+
+              {mapView === 'abstract' && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-200 font-semibold">Filters</label>
+                  <button onClick={() => { setShowBusyOnly(s => !s); }} className={`px-2 py-1 rounded ${showBusyOnly ? 'bg-rose-500 text-white' : 'bg-white/5 text-slate-200'}`}>Busy</button>
+                  <button onClick={() => { setShowActiveOnly(s => !s); }} className={`px-2 py-1 rounded ${showActiveOnly ? 'bg-emerald-500 text-white' : 'bg-white/5 text-slate-200'}`}>Active</button>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 ml-4">
                 <label className="text-xs text-slate-200 font-semibold">Time</label>
@@ -837,6 +1190,12 @@ const MapViz: React.FC = () => {
                     <div className="text-sm font-bold">{selectedNode.label} <span className="text-xs text-slate-400">({selectedNode.id})</span></div>
                     <div className="text-xs text-slate-300 mt-1">Status: <span className={`${selectedNode.status === 'active' ? 'text-emerald-300' : selectedNode.status === 'busy' ? 'text-rose-300' : 'text-slate-400'}`}>{selectedNode.status}</span></div>
                     <div className="text-xs text-slate-300 mt-1">Traffic: <span className="font-mono">{selectedNode.traffic}%</span></div>
+                    {selectedNode.city && (
+                      <div className="text-xs text-slate-300 mt-1">Location: <span className="font-mono">{selectedNode.city}{selectedNode.state ? `, ${selectedNode.state}` : ''}</span></div>
+                    )}
+                    {selectedNode.scanCount && (
+                      <div className="text-xs text-slate-300 mt-1">Scans: <span className="font-mono text-emerald-300">{selectedNode.scanCount}</span></div>
+                    )}
                   </div>
                   <div>
                     <button aria-label="Close node info" onClick={() => setSelectedNode(null)} className="p-1 rounded-md bg-white/10 hover:bg-white/20">
@@ -844,7 +1203,12 @@ const MapViz: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="mt-3 text-xs text-slate-300">More details could go here (last scan time, recent errors, pinned notes).</div>
+                <div className="mt-3 text-xs text-slate-300">
+                  {selectedNode.lastActivity ? 
+                    `Last activity: ${new Date(selectedNode.lastActivity).toLocaleString()}` :
+                    'Real-time mail processing center'
+                  }
+                </div>
               </div>
             )}
 
@@ -852,10 +1216,13 @@ const MapViz: React.FC = () => {
             <div className="absolute bottom-4 left-4 z-20 bg-slate-900/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700/50 shadow-lg">
                <div className="flex items-center gap-2 text-slate-300 text-xs font-medium">
                   <Wifi className="w-3 h-3 text-blue-400" />
-                  <span>Network Load: 78%</span>
+                  <span>Network Load: {Math.round(nodes.reduce((sum, node) => sum + node.traffic, 0) / (nodes.length || 1))}%</span>
                </div>
                <div className="w-32 h-2 bg-slate-800 mt-2 rounded-full overflow-hidden shadow-inner">
-                  <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 w-[78%] animate-pulse rounded-full"></div>
+                  <div 
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 animate-pulse rounded-full transition-all duration-1000" 
+                    style={{ width: `${Math.round(nodes.reduce((sum, node) => sum + node.traffic, 0) / (nodes.length || 1))}%` }}
+                  ></div>
                </div>
             </div>
 

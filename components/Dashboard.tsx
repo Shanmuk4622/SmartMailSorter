@@ -1,17 +1,56 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, AreaChart, Area
 } from 'recharts';
 import { ScanResult } from '../types';
 import MapViz from './MapViz';
-import { Activity, Package, MapPin, AlertCircle, TrendingUp, TrendingDown, Clock, BarChart3 } from 'lucide-react';
+import { insertSampleData, addTestScan } from '../testUtils';
+import { Activity, Package, MapPin, AlertCircle, TrendingUp, TrendingDown, Clock, BarChart3, Database, TestTube } from 'lucide-react';
 
 interface DashboardProps {
   history: ScanResult[];
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ history }) => {
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  
+  // Test functions for real-time data
+  const handleInsertSampleData = async () => {
+    setIsLoadingData(true);
+    setTestMessage(null);
+    try {
+      const result = await insertSampleData();
+      if (result.success) {
+        setTestMessage(`✅ Successfully loaded ${result.count} sample records`);
+      } else {
+        setTestMessage(`❌ Error: ${JSON.stringify(result.error) || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setTestMessage(`❌ Error: ${error}`);
+    }
+    setIsLoadingData(false);
+    // Clear message after 3 seconds
+    setTimeout(() => setTestMessage(null), 3000);
+  };
+
+  const handleAddTestScan = async () => {
+    setIsLoadingData(true);
+    setTestMessage(null);
+    try {
+      const result = await addTestScan();
+      if (result.success) {
+        setTestMessage(`✅ Test scan added: ${result.data?.id}`);
+      } else {
+        setTestMessage(`❌ Error: ${JSON.stringify(result.error) || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setTestMessage(`❌ Error: ${error}`);
+    }
+    setIsLoadingData(false);
+    setTimeout(() => setTestMessage(null), 3000);
+  };
   // Compute Stats
   const totalScans = history.length;
   const avgConfidence = history.length > 0 
@@ -34,6 +73,42 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* Real-time Testing Panel */}
+      <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-2xl p-6 border border-purple-500/30 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <TestTube className="w-5 h-5 text-purple-400" />
+          <h3 className="text-lg font-semibold text-white">Real-time Testing</h3>
+        </div>
+        <div className="flex flex-wrap gap-3 items-center">
+          <button
+            onClick={handleInsertSampleData}
+            disabled={isLoadingData}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+          >
+            <Database className="w-4 h-4" />
+            {isLoadingData ? 'Loading...' : 'Load Sample Data'}
+          </button>
+          <button
+            onClick={handleAddTestScan}
+            disabled={isLoadingData}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+          >
+            <Package className="w-4 h-4" />
+            {isLoadingData ? 'Adding...' : 'Add Test Scan'}
+          </button>
+          {testMessage && (
+            <div className={`px-3 py-1 rounded-lg text-sm ${
+              testMessage.startsWith('✅') ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'
+            }`}>
+              {testMessage}
+            </div>
+          )}
+        </div>
+        <p className="text-slate-400 text-sm mt-2">
+          Use these buttons to test real-time data updates in NetworkViz and MapViz. Watch the visualizations update automatically!
+        </p>
+      </div>
+
       {/* Top Stats Cards with Glassmorphism feel */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 

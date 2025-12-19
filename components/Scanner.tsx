@@ -266,11 +266,21 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       const data = await extractMailData(processedImage, { provider: providerForCall, model, renderUrl });
       setResult(data);
       
-      const safeConfidence = Math.round(data.confidence);
+      const scanResult: ScanResult = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        originalImageUrl: image!,
+        processedImageUrl: processedImage,
+        data: data,
+        status: 'completed',
+        processingTimeMs: Date.now() - start
+      };
 
+      // Save complete scan result to Supabase using individual columns
       const { data: dbData, error: dbError } = await supabase
         .from('mail_scans')
         .insert([{
+          id: scanResult.id,
           recipient: data.recipient,
           address: data.address,
           pin_code: data.pin_code,
@@ -279,22 +289,18 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
           country: data.country,
           sorting_center_id: data.sorting_center_id,
           sorting_center_name: data.sorting_center_name,
-          confidence: safeConfidence,
-          status: 'completed'
+          confidence: Math.round(data.confidence),
+          status: 'completed',
+          created_at: new Date().toISOString()
         }])
         .select();
 
-      if (dbError) console.error("Supabase Insert Error:", dbError.message);
-
-      const scanResult: ScanResult = {
-        id: dbData ? dbData[0].id : crypto.randomUUID(),
-        timestamp: Date.now(),
-        originalImageUrl: image!,
-        processedImageUrl: processedImage,
-        data: data,
-        status: 'completed',
-        processingTimeMs: Date.now() - start
-      };
+      if (dbError) {
+        console.error("❌ Supabase Insert Error:", dbError.message);
+        // Still call onScanComplete even if DB save fails
+      } else {
+        console.log('✅ Scan saved to database:', dbData?.[0]?.id);
+      }
       
       onScanComplete(scanResult);
 

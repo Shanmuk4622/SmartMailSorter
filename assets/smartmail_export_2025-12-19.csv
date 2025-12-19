@@ -1,0 +1,61 @@
+Timestamp,Recipient,Address,PIN/ZIP,City,Country,Sorting Center ID,Confidence
+"12/20/2025, 4:16:20 AM","Mr. Rajiv Malhotra","34-B, Anand Marg, Jaipur, Rajasthan, 302004, India","302004","Jaipur","India","JPR-SC-302",100
+"12/20/2025, 2:37:55 AM","Postcard Jar","P.O. Box 334, Crete, NE, U.S.A.","68333","Crete","U.S.A.","LINCOLN_NE_PDC",98
+"12/20/2025, 2:33:25 AM","Postcard Jar","P.O. Box 334, Crete, NE, U.S.A., 68333","68333","Crete","U.S.A.","LINCOLN-NE-PDC",98
+"12/20/2025, 1:48:22 AM","MUGHAL MINIATURE","MUGHAL MINIATURE, HUNTING SCENE, POST CARD, Te: Iz, 55, Palace Read,, Jaipwi Rajasthan,, 302006, India, Anjun, Singh","302006","Jaipur","India","HUB-302",98
+"12/20/2025, 1:32:00 AM","","","110001","New Delhi","India","ND-110",95
+"12/20/2025, 1:27:35 AM","Mr. K. Ramesh","3, Temple Street, Mylapore, Chennai, Tamil Nadu, 600004, India","600004","Chennai","India","MAA_SC",100
+"12/20/2025, 12:20:05 AM","","","","","","",0
+"12/19/2025, 11:23:01 PM","PHAD PAINTING","PHAD PAINTING, RAJASTHAN, POST CARD, To: Itn, Vikeamt Bingh,, 78, %ort Road,, Jodhpur, Rujtsthan,, 342001, Iudiu","342001","Unknown City","India","HUB-342",98
+"12/19/2025, 11:19:20 PM","MUGHAL MINIATURE","MUGHAL MINIATURE, HUNTING SCENE, POST CARD, Te: T., Singh,, 55, Palace Read,, Jaipi, Rajasthan,, 302006, India, Avjun","302006","Unknown City","India","HUB-302",98
+"12/19/2025, 11:14:26 PM","PHAD PAINTING","PHAD PAINTING, RAJASTHAN, POST CARD, To: Itr. VVikram Singh,, 78, Hort Road,, Jodhpur;, Rujusthan,, 342001, India","342001","Unknown City","India","HUB-342",98
+"12/19/2025, 10:52:18 PM","Qa. &ria sacRf]","9113 &riilat arRiHaT <rris5, 2, 50, ~2 d1R <drdlst 0 252227, 6, 8, 916 Sic1HIS Jaal, , 2, Qa. &ria sacRf], 67, {zi +r HFATI 0 527722, HGNT Roji MAHTMA GANDHI, ~dun, 1, Post office, E, 8, 1, f47PIN, 1, 1 | 0 | 0, 0, 1, (va & $ Iaril fa sir 441 gf1ax Do not write or print below this line)","252227","Unknown City","India","HUB-252",98
+"12/19/2025, 10:35:04 PM","WARLI TRIBAL ART","WARLI TRIBAL ART, MAHARASHTRA, POST CARD, Tc:, Ms: Anjali Oesai;, iil, 34/4, Hill View, 'Scciety, pune; Mahahaskbrvs, 411004, India","411004","Unknown City","India","HUB-411",98
+"12/19/2025, 10:28:15 PM","PHAD PAINTING","PHAD PAINTING, RAJASTHAN, POST CARD, To: Itr  Vikram Singh,, 78, Font Road,, Jodhpur , Rujasthan,, 342001, India","342001","Unknown City","India","HUB-342",95
+"12/19/2025, 9:47:18 PM","","","","","","",80
+"12/19/2025, 9:45:57 PM","","","","","","",80
+"12/19/2025, 9:41:11 PM","Qa . &rRfHaT &acrf)","911a &RIaila &riHat wris, 2, 50, <62 A1R ?aralsl 0 252227, E, 8, 916 8icHId ydal, 1, 2, Qa . &rRfHaT &acrf), 67, Tzit HFT 0527722, Hott 47 MAHAMA GANDHI, Di~, 1, Post office, E, 83, E, f7 PIN, 6, 8, 2, 1, (aim $ ati 6& &i4dgln & Do not write or, below this line), print ,","252227","Unknown City","India","HUB-252",95
+"12/19/2025, 9:40:50 PM","Mu Balaji Suinivasan,","POST CARD, To:, Mu Balaji Suinivasan,, 8, Oliven Road,, V, Taotar NadiChoocoo4;,, Jndia, KALIGHAT PAINTING, BENGAL","Unknown","Unknown City","India","HUB-XXX",95
+"12/19/2025, 9:25:50 PM","CHERIYAL SCROLL PAINTING","CHERIYAL SCROLL PAINTING, TELANGANA, POST CARD, To: Mts Geeta Reddy,, 12, Kaslunba Rcad,, Bangalne, Karatakas, 560001, Jndia","560001","Unknown","India","HUB-560",98
+"12/19/2025, 9:24:59 PM","911a &RIaila &riHat wris","911a &RIaila &riHat wris, 2, 50, <62 A1R ?aralsl 0 252227, E, 8, 916 8icHId ydal, 1, 2, Qa . &rRfHaT &acrf), 67, Tzit HFT 0527722, Hott 47 MAHAMA GANDHI, Di~, 1, Post office, E, 83, E, f7 PIN, 6, 8, 2, 1, (aim $ ati 6& &i4dgln & Do not write or, below this line), print ,","252227","Unknown","India","HUB-252",98
+"12/19/2025, 9:19:17 PM","9113 &riilat arRicT <ris5","9113 &riilat arRicT <ris5, 2, 50, <T2 d1R <aralst 0 252227, 1, 6, 8, 916 sicHIS ydaf, 2, Qa. &rcT sacrf|, 67, {zi Az HFATI 0 527722, HGttTT Rioji MAHTMA GANDHI, FyDu^, 1, Post office, 1, 8, [, f7 PIN, 1, 1, 0 |, 0, 1, (a&r $ Aami 6& &ik4dynw Do not write or, below this line), print","252227","Unknown City","India","SC-252",100
+"12/19/2025, 9:18:45 PM","WARLI TRIBAL ART","WARLI TRIBAL ART, MAHARASHTRA, POST CARD, Tc:, Ms: Anjali Oesai;, 1, 34/A, Hile View: Secieby, pune; Mahahaskbrvs, 411004, Indid","411004","Unknown City","India","SC-411",100
+"12/19/2025, 9:13:50 PM","MADHUBANI HARVEST","MADHUBANI HARVEST, BIHAR, POST CARD, A, Jo: Mns. Kavita Shatma;, 45/4, Geen Park Main;, Keu Delhi;, WV, Delhi, 40016,, Jndic, #Ka [Mal","Unknown","Unknown City","India","N/A",100
+"12/19/2025, 9:01:34 PM","","","","","","",80
+"12/19/2025, 8:56:22 PM","MADHUBANI HARVEST","MADHUBANI HARVEST, BIHAR, POST CARD, A, Jo: Mns. Kavita Shatma;, 45/4, Geen Park Main;, Keu Delhi;, WV, Delhi, 40016,, Jndic, #Ka [Mal","Unknown","Unknown","India","N/A",100
+"12/19/2025, 8:55:53 PM","Mu Balaji Suinivasan,","POST CARD, To:, Mu Balaji Suinivasan,, 8, Oliven Road,, V, Taotar NadiChoocoo4;,, Jndia, KALIGHAT PAINTING, BENGAL","Unknown","Unknown","India","N/A",100
+"12/19/2025, 8:47:52 PM","a book with a picture of a person on it","a book with a picture of a person on it","Unknown","Unknown","India","N/A",100
+"12/19/2025, 8:46:57 PM","Mark Williams","023 Storybrook Rd.","49464","Zeeland","USA","MI-GR-494",98
+"12/19/2025, 8:43:06 PM","a collage of photographs of a ","a collage of photographs of a man and a woman","Unknown","Unknown","India","N/A",100
+"12/19/2025, 7:11:57 PM","{'error': 'Bad Request: Your endpoint is in error,","{'error': 'Bad Request: Your endpoint is in error, check its status on endpoints.huggingface.co'}","Unknown","Unknown","India","N/A",100
+"12/19/2025, 7:11:01 PM","{'error': 'Bad Request: Your endpoint is in error,","{'error': 'Bad Request: Your endpoint is in error, check its status on endpoints.huggingface.co'}","Unknown","Unknown","India","N/A",100
+"12/19/2025, 7:08:38 PM","{'error': 'Bad Request: Your endpoint is in error,","{'error': 'Bad Request: Your endpoint is in error, check its status on endpoints.huggingface.co'}","Unknown","Unknown","India","N/A",100
+"12/19/2025, 7:02:17 PM","37ai4 57 T18","INLAND LETTER CARD, Yelhul, hebablk seen, ixsix-digin Lide_i_lextenx, (7r} Nade4akadya # Do not write or print below this Iine), RTPIN, 0, 0/0","Unknown","Unknown","India","ID: N/A",100
+"12/19/2025, 7:01:00 PM","Tc: Mu Anjun Reddys","5-9-22, Chanee Road,, Hydenabad, Telangana,, 500001, Jndia","500001","Unknown","India","SC-500",100
+"12/19/2025, 6:58:27 PM","POST GARD","Tc: Mu Anjun Reddys, 5-9-22, Chanee Road,, Hydenabad, Telangana,, 500001, Jndia","500001","Unknown","India","SC-500",100
+"12/19/2025, 6:48:45 PM","POST CARD","To: Mr . Ravi Shankar, 15, Mall Road;, Shimla,, Himachal Pradesh,","171001","Unknown","India","SC-171",100
+"12/19/2025, 6:38:22 PM","","","342001","","","",80
+"12/19/2025, 6:37:57 PM","","","411004","","","",80
+"12/19/2025, 6:37:13 PM","","","342001","","","",80
+"12/19/2025, 6:18:00 PM","Mr. Vikram Singh","78, Fort Road, Jodhpur, Rajasthan, 342001, India","342001","Jodhpur","India","JOD-342",100
+"12/19/2025, 6:16:40 PM","","MUMBAI POST CARD To: Ms. Priya Desai 12A,Marine Drive Mumbai; Maharashtra 400020 India","400020","","","",80
+"12/19/2025, 5:13:54 PM","H. Kesharimal Jewellers","6-7 Dhanlaxmi Market, Sadar Bazar, Sagwara","700031","Kolkata","India","KOL-RMS-01",95
+"12/19/2025, 4:33:49 PM","Mark Williams","023 Storybrook Rd. Zeeland, MI 49464","49464","Zeeland","USA","GRR-PDC",95
+"12/19/2025, 4:26:23 PM","Mr. Arjun Singh","55, Palace Road, Jaipur, Rajasthan, 302006, India","302006","Jaipur","India","JPR-01",98
+"12/19/2025, 2:48:47 PM","Mr. K. Ramesh","3, Temple Street, Mylapore, Chennai, Tamil Nadu, 600004, India","600004","Chennai","India","CHN-SH-01",100
+"12/19/2025, 2:25:26 PM","Mark Williams","023 Storybrook Rd. Zeeland, MI 49464","49464","Zeeland","USA","USPS-MI-494",98
+"12/19/2025, 2:25:20 PM","Shah Hiralal Kesharimal Saraf","Sadar Bazar, 6-7 Dhanlaxmi Market, Sagwara","700031","Kolkata","India","KOL-700",95
+"12/19/2025, 2:23:47 PM","Not specified","Not specified","700031","Kolkata","India","KOL-700",95
+"12/19/2025, 2:01:35 PM","Mr. Amit Dubey","77, Civil Lines, Allahabad, Uttar Pradesh, 211001, India","211001","Allahabad","India","ALD-211",100
+"12/19/2025, 12:31:24 PM","Ms. Anjali Desai","34/A, Hill View Society, Pune, Maharashtra, 411004, India","411004","Pune","India","PUNE-SC-01",100
+"12/19/2025, 12:30:18 PM","Mr. Ravi Shankar","15, Mall Road, Shimla, Himachal Pradesh, 171001, India","171001","Shimla","India","SHM-171",100
+"12/19/2025, 12:12:04 PM","Shah Hiralal Kesrimal Saraf","Sadar Bazar, Sagwara","700031","Kolkata","India","KOL-700",95
+"12/19/2025, 12:01:23 PM","N/A","N/A","700031","Kolkata","India","KOL_RMS_01",90
+"12/19/2025, 11:59:46 AM","Mr. Vikram Singh","78, Fort Road, Jodhpur, Rajasthan, 342001, India","342001","Jodhpur","India","JDH-01",100
+"12/19/2025, 11:58:54 AM","Mr. Anirudh Sharma","The Old Haveli, 10, Kucha Pati Ram, Chandni Chowk, Delhi, Delhi, 110006, India","110006","Delhi","India","DEL-01",100
+"12/19/2025, 11:08:26 AM","Priya Sharma","45 MG Road, Bangalore, Karnataka, 560001, India","560001","Bangalore","India","BLR-01",98
+"12/18/2025, 11:31:36 PM","Aditya Verma","165 Main Bazaar
+Suite 483","226001","Lucknow","India","INLKO226001",98
+"12/18/2025, 11:31:01 PM","Riya Verma","688 Nehru Street, Suite 991","520001","Vijayawada","India","SC-AP-05",95
+"12/18/2025, 11:31:01 PM","Sneha Patel","507 Nehru Street, Suite 624","400001","Mumbai","India","SC-MH-01",99
+"12/18/2025, 11:31:01 PM","Aditya Sharma","373 Main Bazaar","781001","Guwahati","India","SC-ASM-01",98
