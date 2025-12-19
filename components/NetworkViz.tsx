@@ -162,11 +162,15 @@ const NetworkViz: React.FC = () => {
       .attr("class", "nodes")
       .selectAll("g")
       .data(nodes)
-      .join("g")
-      .call(d3.drag<SVGGElement, NetworkNode>()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended));
+      .join("g");
+
+    // Create drag behavior and apply (cast to any to satisfy d3/TS selection typing)
+    const dragBehavior = d3.drag<SVGGElement, NetworkNode>()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+
+    nodeGroup.call(dragBehavior as any);
 
     // Outer glow ring (Pulse animation)
     nodeGroup.append("circle")
@@ -271,6 +275,12 @@ const NetworkViz: React.FC = () => {
       d.fy = event.y;
     }
 
+    function dragended(event: any, d: any) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
 
     // Simulate changing load and update metrics periodically
     const metricInterval = setInterval(() => {
@@ -296,12 +306,8 @@ const NetworkViz: React.FC = () => {
       clearInterval(metricInterval);
       simulation.stop();
     };
-    }
-
-      return () => {
-        simulation.stop();
-      };
     };
+
     // Build now
     const maybeCleanup = build();
 
