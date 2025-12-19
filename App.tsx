@@ -129,10 +129,10 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 md:ml-72">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="max-w-7xl mx-0 px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -174,8 +174,8 @@ const App: React.FC = () => {
         </header>
 
         {/* Content Scroll Area */}
-        <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto h-full flex flex-col">
+          <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+          <div className="w-full max-w-full mx-0 h-full flex flex-col">
             <div className="flex-1 animate-fade-in">
               {currentView === AppView.DASHBOARD && <Dashboard history={history} />}
               {currentView === AppView.NETWORK && <NetworkViz />}
