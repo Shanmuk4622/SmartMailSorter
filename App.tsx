@@ -129,7 +129,7 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 md:ml-72">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
