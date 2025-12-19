@@ -28,6 +28,8 @@ interface Particle {
 
 // small helper
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+// normalize a string to an alphanumeric lowercase key for robust matching
+const normalizeKey = (s?: string) => (String(s || '')).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const NetworkViz: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,25 +112,30 @@ const NetworkViz: React.FC = () => {
       { id: "LOC-PS", type: "LOCAL", status: "idle", label: "Pasadena" },
     ];
 
-    // Apply label overrides from logs when available. We try direct id match first,
-    // otherwise attempt a loose match by checking whether the override key appears
-    // in the existing label or id (case-insensitive).
+    // Apply label overrides from logs when available. Use normalized alphanumeric
+    // keys and token matching to increase the chance of matching log-provided
+    // sorting center ids/names to the node ids/labels in the visualization.
     if (hubLabelOverride) {
+      const entries = Object.entries(hubLabelOverride || {});
       nodes.forEach(n => {
-        const direct = hubLabelOverride[n.id];
-        if (direct) {
-          n.label = direct;
-          return;
+        // helper to attempt to apply a matching override
+        for (const [k, v] of entries) {
+          if (!k) continue;
+          const kn = normalizeKey(k);
+          const idn = normalizeKey(n.id);
+          const labn = normalizeKey(n.label);
+
+          if (!kn) continue;
+          // exact normalized matches
+          if (kn === idn || kn === labn) { n.label = v; break; }
+
+          // substring/containment matches (either direction)
+          if (idn.includes(kn) || labn.includes(kn) || kn.includes(idn) || kn.includes(labn)) { n.label = v; break; }
+
+          // token match: if any token from node.label equals the key
+          const tokens = (n.label || '').split(/\s+/).map(t => normalizeKey(t)).filter(Boolean);
+          if (tokens.includes(kn)) { n.label = v; break; }
         }
-        // loose match: find an override whose key is substring of current label or id
-        const found = Object.entries(hubLabelOverride).find(([k, v]) => {
-          if (!k) return false;
-          const kl = k.toLowerCase();
-          const lab = (n.label || '').toLowerCase();
-          const idl = (n.id || '').toLowerCase();
-          return kl && (lab.includes(kl) || idl.includes(kl) || kl.includes(lab) || kl.includes(idl));
-        });
-        if (found) n.label = found[1];
       });
     }
 
@@ -161,7 +168,18 @@ const NetworkViz: React.FC = () => {
     // Apply absolute coordinates for hubs and initial local placements near their hub
     nodes.forEach(n => {
       if (n.type === 'HUB') {
-        const pos = hubPositions[n.id];
+        let pos = (hubPositions as any)[n.id];
+        // If not a direct key match, try normalized/key-token matching against override keys
+        if (!pos) {
+          const matchKey = Object.keys(hubPositions || {}).find(k => {
+            const kn = normalizeKey(k);
+            const idn = normalizeKey(n.id);
+            const labn = normalizeKey(n.label);
+            return kn && (kn === idn || kn === labn || idn.includes(kn) || labn.includes(kn) || kn.includes(idn) || kn.includes(labn));
+          });
+          if (matchKey) pos = (hubPositions as any)[matchKey];
+        }
+
         if (pos) {
           n.x = width * pos.x;
           n.y = height * pos.y;
@@ -559,8 +577,55 @@ const NetworkViz: React.FC = () => {
                 setHubPositionsOverride(override);
                 // also keep a mapping of id->label from logs so we can rename nodes
                 const labelMap: Record<string, string> = {};
+
+                // Common city keyword -> hub id mapping to ensure logs referring to
+                // city names map to the existing HUB ids shown on the map.
+                const cityToHub: Record<string, string> = {
+                  'newyork': 'HUB-NYC', 'nyc': 'HUB-NYC', 'new york': 'HUB-NYC', 'manhattan': 'HUB-NYC',
+                  'chicago': 'HUB-CHI', 'chi': 'HUB-CHI', 'chgo': 'HUB-CHI',
+                  'losangeles': 'HUB-LAX', 'los angeles': 'HUB-LAX', 'losangeles': 'HUB-LAX', 'la': 'HUB-LAX',
+                  'miami': 'HUB-MIA'
+                };
+
                 rows.forEach(r => {
-                  if (r.name) labelMap[String(r.id)] = r.name;
+                  const idKey = String(r.id || '').trim();
+                  const nameRaw = String(r.name || '').trim();
+                  const nameKey = nameRaw;
+                  if (nameRaw) {
+                    // If the name contains a known city token, map it to that HUB id
+                    const lower = nameRaw.toLowerCase();
+                    for (const token in cityToHub) {
+                      if (!token) continue;
+                      if (lower.includes(token)) {
+                        const hubId = cityToHub[token];
+                        // ensure we override the hub label directly
+                        labelMap[hubId] = nameRaw;
+                        // also ensure position override uses the hub id as key when coords exist
+                        if (override[String(r.id)]) {
+                          override[hubId] = override[String(r.id)];
+                        } else if (r.lat !== null && r.lon !== null) {
+                          // compute normalized position if not already set
+                          const xFrac = clamp(normX(r.lon as number), 0.05, 0.95);
+                          const yFrac = clamp(normY(r.lat as number), 0.05, 0.95);
+                          override[hubId] = { x: xFrac, y: yFrac };
+                        }
+                      }
+                    }
+
+                    // Map by id and by full name as fallback
+                    if (idKey) labelMap[idKey] = nameRaw;
+                    labelMap[nameKey] = nameRaw;
+
+                    // Also add tokenized words and a normalized alphanumeric key
+                    nameRaw.split(/\s+/).forEach(tok => {
+                      const t = tok.trim();
+                      if (t.length >= 2) labelMap[t.toLowerCase()] = nameRaw;
+                    });
+                    const norm = nameRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (norm) labelMap[norm] = nameRaw;
+                  } else if (idKey) {
+                    labelMap[idKey] = idKey;
+                  }
                 });
                 setHubLabelOverride(labelMap);
                 // set dynamic layout to true so nodes can settle around hubs

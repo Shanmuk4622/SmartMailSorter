@@ -31,6 +31,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   });
   const [cnnLog, setCnnLog] = useState<string>("");
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [isFallingBack, setIsFallingBack] = useState<string | null>(null);
   
   // Curated list of free/public models suitable for OCR / image-to-text or post-processing.
   // All Hugging Face calls via our server proxy still require `HF_API_KEY` set on the server (Vercel).
@@ -75,6 +76,25 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       console.warn("Failed to auto-save scanner state:", e);
     }
   }, [result, options]);
+
+  // Listen for aiService fallback events so we can inform the user briefly
+  useEffect(() => {
+    const handler = (ev: any) => {
+      try {
+        const d = ev?.detail || {};
+        const msg = d && d.to ? `Attempting fallback to ${d.to}...` : 'Attempting fallback...';
+        setIsFallingBack(msg);
+        // clear after a short delay
+        setTimeout(() => setIsFallingBack(null), 6000);
+      } catch (e) {
+        // ignore
+      }
+    };
+    window.addEventListener('aiService:fallback', handler as EventListener);
+    return () => {
+      window.removeEventListener('aiService:fallback', handler as EventListener);
+    };
+  }, []);
 
   // CNN Visualization Effect
   useEffect(() => {
@@ -413,6 +433,13 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Short fallback banner when aiService is attempting a fallback provider */}
+              {isFallingBack && (
+                <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700 flex items-center gap-2">
+                  <span className="font-mono text-xs">{isFallingBack}</span>
                 </div>
               )}
 

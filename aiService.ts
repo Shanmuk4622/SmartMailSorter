@@ -63,7 +63,7 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
 
   const headers: Record<string, string> = {
     // Required by ngrok to bypass the browser warning interstitial for programmatic requests
-    'ngrok-skip-browser-warning': '69420'
+    'ngrok-skip-browser-warning': 'true'
   };
 
   const res = await fetch(RENDER_SCAN_URL, {
@@ -82,11 +82,12 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
 
 export const extractMailData = async (
   base64Image: string,
-  opts?: { provider?: Provider; model?: string; renderUrl?: string }
+  opts?: { provider?: Provider; model?: string; renderUrl?: string; retryAttempt?: number }
 ): Promise<MailData> => {
   const provider = opts?.provider || 'gemini';
   const model = opts?.model;
   const renderUrl = opts?.renderUrl;
+  const retryAttempt = opts?.retryAttempt || 0;
 
   // Clean base64 image data
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
@@ -166,16 +167,53 @@ export const extractMailData = async (
         country: json.country || '',
         sorting_center_id: json.sorting_center_id || '',
         sorting_center_name: json.sorting_center_name || '',
-        confidence: typeof json.confidence === 'number' ? Math.round(json.confidence) : 80
+        confidence: typeof json.confidence === 'number' ? Math.round(json.confidence) : 80,
+        region: json.region || json.circle || json.region_name || ''
       };
       return finalize(out);
     } catch (err: any) {
       console.error('[aiService] Render scan failed', err);
-      // Surface a clearer error message for CORS/network issues
-      if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('net::ERR'))) {
-        throw new Error('Network or CORS error when calling Render scan endpoint. Check the Render URL and ensure the service allows requests from this origin (Access-Control-Allow-Origin) or use a server-side proxy.');
+      const em = err?.message || String(err);
+
+      // If this is the first failure try a fallback: first Hugging Face (if available), then Gemini.
+      if (retryAttempt === 0) {
+        // Try Hugging Face if HF key is present
+        if (process && (process as any).env && ((process as any).env.HF_API_KEY || (process as any).env.HF_KEY)) {
+          console.warn('[aiService] Falling back to Hugging Face after Render failure');
+          try {
+            // Notify UI that we're attempting a fallback so the frontend can show a message
+            if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+              (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'huggingface' } }));
+            }
+          } catch (e) {
+            /* ignore */
+          }
+          return extractMailData(base64Image, { provider: 'huggingface', model: model, retryAttempt: 1 });
+        }
+
+        // Otherwise try Gemini if available
+        if (geminiClient) {
+          console.warn('[aiService] Falling back to Gemini after Render failure');
+          try {
+            if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+              (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'gemini' } }));
+            }
+          } catch (e) {
+            /* ignore */
+          }
+          return extractMailData(base64Image, { provider: 'gemini', model: model, retryAttempt: 1 });
+        }
       }
-      throw err;
+
+      // If we've already retried or no fallback available, surface a friendly error
+      if (em && em.includes('404')) {
+        throw new Error(`Render scan failed: 404 Not Found. Verify that the /scan endpoint exists at the provided URL (${renderUrl}). Response: ${em}`);
+      }
+      if (em && (em.includes('Failed to fetch') || em.includes('NetworkError') || em.includes('net::ERR') || em.includes('502') || em.includes('Bad Gateway'))) {
+        throw new Error(`Network or CORS error when calling Render scan endpoint. Check the Render URL (${renderUrl}), ensure the service is running, and that CORS is enabled.`);
+      }
+      // otherwise rethrow original message
+      throw new Error(`Render scan failed: ${em}`);
     }
   }
 
