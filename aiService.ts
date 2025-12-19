@@ -1,25 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { MailData } from './types';
 
-// Initialize Gemini client if API key is present
-const geminiKey = (process as any)?.env?.API_KEY || (process as any)?.env?.GEMINI_API_KEY;
-let geminiClient: any = null;
-if (geminiKey) {
-  try {
-    geminiClient = new GoogleGenAI({ apiKey: geminiKey });
-  } catch (e) {
-    console.warn('[aiService] Could not initialize Gemini client', e);
-  }
-}
-
-// Helper to normalize and validate MailData
+// Helper to normalize a returned JSON blob into MailData
 const finalize = (data: any): MailData => {
-  if (!data) throw new Error('Empty response data');
-  // Ensure fields exist
   const out: any = {
-    recipient: data.recipient || '',
-    address: data.address || '',
-    pin_code: data.pin_code || data.zip || '',
+    recipient: data.recipient || data.name || '',
+    address: data.address || data.text || '',
+    pin_code: data.pin_code || data.zip || data.pin || '',
     city: data.city || '',
     state: data.state || '',
     country: data.country || '',
@@ -37,6 +24,21 @@ const finalize = (data: any): MailData => {
 };
 
 export type Provider = 'gemini' | 'huggingface' | 'render';
+
+// Initialize Gemini client if API key present (optional)
+let geminiClient: any = null;
+try {
+  const geminiKey = (process as any)?.env?.GEMINI_API_KEY || (process as any)?.env?.GOOGLE_API_KEY || undefined;
+  if (geminiKey) {
+    try {
+      geminiClient = new GoogleGenAI({ apiKey: geminiKey });
+    } catch (e: any) {
+      console.warn('[aiService] Could not initialize Gemini client', e);
+    }
+  }
+} catch (e: any) {
+  /* ignore */
+}
 
 // Helper: convert data URL to Blob
 const dataURLToBlob = (dataURL: string) => {
@@ -83,7 +85,7 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
     if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
       (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, status: res.status, statusText: res.statusText } }));
     }
-  } catch (e) {
+  } catch (e: any) {
     /* ignore */
   }
 
@@ -100,17 +102,17 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
       if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
         (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, json, status: res.status } }));
       }
-    } catch (e) { /* ignore */ }
+    } catch (e: any) { /* ignore */ }
     return json; // expected shape documented below
-  } catch (e) {
-    console.error('[aiService] Failed to parse Render response as JSON:', e, rawText);
-    try {
-      if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
-        (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, parseError: String(e), status: res.status } }));
-      }
-    } catch (ee) { /* ignore */ }
-    throw new Error(`Render scan returned invalid JSON: ${e?.message || e} -- raw: ${rawText}`);
-  }
+    } catch (e: any) {
+      console.error('[aiService] Failed to parse Render response as JSON:', e, rawText);
+      try {
+        if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+          (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, parseError: String(e), status: res.status } }));
+        }
+      } catch (ee: any) { /* ignore */ }
+      throw new Error(`Render scan returned invalid JSON: ${String(e?.message ?? e)} -- raw: ${rawText}`);
+    }
 }
 
 export const extractMailData = async (
@@ -180,7 +182,7 @@ export const extractMailData = async (
       else if (maybeText.includes('```')) maybeText = maybeText.replace(/```/g, '');
       const parsed = JSON.parse(maybeText.trim());
       return finalize(parsed);
-    } catch (e) {
+    } catch (e: any) {
       console.error('[aiService] Failed to parse HF chat response as JSON:', e, json);
       throw new Error('Invalid JSON response from Hugging Face model.');
     }
@@ -218,7 +220,7 @@ export const extractMailData = async (
             if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
               (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'huggingface' } }));
             }
-          } catch (e) {
+          } catch (e: any) {
             /* ignore */
           }
           return extractMailData(base64Image, { provider: 'huggingface', model: model, retryAttempt: 1 });
@@ -231,7 +233,7 @@ export const extractMailData = async (
             if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
               (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'gemini' } }));
             }
-          } catch (e) {
+          } catch (e: any) {
             /* ignore */
           }
           return extractMailData(base64Image, { provider: 'gemini', model: model, retryAttempt: 1 });

@@ -541,6 +541,10 @@ const NetworkViz: React.FC = () => {
                 const withCoords = rows.filter(r => r.lat !== null && r.lon !== null);
                 const override: Record<string, { x: number; y: number }> = {};
 
+                // declare normalizers in outer scope so they can be used below
+                let normX = (lon: number) => 0.5;
+                let normY = (lat: number) => 0.5;
+
                 if (withCoords.length > 0) {
                   const lats = withCoords.map(r => r.lat as number);
                   const lons = withCoords.map(r => r.lon as number);
@@ -549,10 +553,9 @@ const NetworkViz: React.FC = () => {
                   const minLon = Math.min(...lons);
                   const maxLon = Math.max(...lons);
 
-                    // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
-                    // Declare normX/normY in outer scope so they can be referenced later
-                    let normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
-                    let normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
+                  // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
+                  normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
+                  normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
 
                   // assign positions using the provided id/name as the override key
                   rows.forEach(r => {
