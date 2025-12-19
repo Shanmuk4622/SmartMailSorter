@@ -450,7 +450,7 @@ const NetworkViz: React.FC = () => {
       window.removeEventListener('resize', onWin);
       if (typeof currentCleanup === 'function') currentCleanup();
     };
-  }, [dynamicLayout, chargeStrength, linkDistanceBase, hubPositionsOverride]);
+  }, [dynamicLayout, chargeStrength, linkDistanceBase, hubPositionsOverride, hubLabelOverride]);
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6">
@@ -549,9 +549,10 @@ const NetworkViz: React.FC = () => {
                   const minLon = Math.min(...lons);
                   const maxLon = Math.max(...lons);
 
-                  // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
-                  const normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
-                  const normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
+                    // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
+                    // Declare normX/normY in outer scope so they can be referenced later
+                    let normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
+                    let normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
 
                   // assign positions using the provided id/name as the override key
                   rows.forEach(r => {
@@ -583,7 +584,7 @@ const NetworkViz: React.FC = () => {
                 const cityToHub: Record<string, string> = {
                   'newyork': 'HUB-NYC', 'nyc': 'HUB-NYC', 'new york': 'HUB-NYC', 'manhattan': 'HUB-NYC',
                   'chicago': 'HUB-CHI', 'chi': 'HUB-CHI', 'chgo': 'HUB-CHI',
-                  'losangeles': 'HUB-LAX', 'los angeles': 'HUB-LAX', 'losangeles': 'HUB-LAX', 'la': 'HUB-LAX',
+                  'losangeles': 'HUB-LAX', 'los angeles': 'HUB-LAX', 'la': 'HUB-LAX',
                   'miami': 'HUB-MIA'
                 };
 
