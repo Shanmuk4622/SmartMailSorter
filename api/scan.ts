@@ -1,12 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// This serverless function proxies a client-provided data URL (base64 image)
-// to the configured RENDER_SCAN_URL (set as an environment variable in Vercel).
-// It constructs a multipart/form-data body and forwards the request, adding
-// the `ngrok-skip-browser-warning` header so the ngrok/render interstitial
-// is bypassed for programmatic calls.
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+// Serverless proxy for /api/scan
+// Note: avoid importing Vercel types to keep this file buildable without
+// installing `@vercel/node` in the app. Use plain `any` for req/res.
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
   const RENDER_SCAN_URL = process.env.RENDER_SCAN_URL;
