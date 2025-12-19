@@ -121,7 +121,13 @@ const NetworkViz: React.FC = () => {
     });
 
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d) => d.target.type === 'LOCAL' ? 80 : 200))
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d: any) => {
+        // d.target may be an id (string) during initialization — resolve to node if needed
+        const targetNode: NetworkNode | undefined = typeof d.target === 'object'
+          ? d.target as NetworkNode
+          : nodes.find(n => n.id === d.target);
+        return targetNode && targetNode.type === 'LOCAL' ? 80 : 200;
+      }))
       .force("charge", d3.forceManyBody().strength(-400))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));

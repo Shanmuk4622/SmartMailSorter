@@ -174,26 +174,29 @@ const MapViz: React.FC = () => {
       .attr("transform", d => `translate(${xScale(d.x)}, ${yScale(d.y)})`);
 
     // Outer Radar Ring (for busy nodes)
-    nodeSelection.filter(d => d.status === 'busy')
+    // For busy nodes, append an animated ring (two <animate> children on the circle)
+    const busyCircles = nodeSelection.filter(d => d.status === 'busy')
       .append("circle")
       .attr("r", 25)
       .attr("fill", "none")
       .attr("stroke", "#f43f5e") // Rose
       .attr("stroke-width", 1)
       .attr("opacity", 0)
-      .append("animate")
-        .attr("attributeName", "r")
-        .attr("from", "5")
-        .attr("to", "35")
-        .attr("dur", "2s")
-        .attr("repeatCount", "indefinite")
-      .select(function() { return this.parentNode; }) // Go back to circle
-      .append("animate")
-        .attr("attributeName", "opacity")
-        .attr("from", "0.5")
-        .attr("to", "0")
-        .attr("dur", "2s")
-        .attr("repeatCount", "indefinite");
+      .style("pointer-events", "none");
+
+    busyCircles.append("animate")
+      .attr("attributeName", "r")
+      .attr("from", "5")
+      .attr("to", "35")
+      .attr("dur", "2s")
+      .attr("repeatCount", "indefinite");
+
+    busyCircles.append("animate")
+      .attr("attributeName", "opacity")
+      .attr("from", "0.5")
+      .attr("to", "0")
+      .attr("dur", "2s")
+      .attr("repeatCount", "indefinite");
 
     // Node Body
     nodeSelection.append("circle")
