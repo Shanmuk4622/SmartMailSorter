@@ -72,12 +72,45 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
     headers,
     body: formData
   });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Render scan failed: ${res.status} ${res.statusText} ${txt}`);
+  // Log response details for debugging; read text first so we can print raw body
+  const rawText = await res.text();
+  // Use console.log so output appears even when devtools filter is set
+  console.log('[aiService] Render scan response status:', res.status, res.statusText);
+  console.log('[aiService] Render scan raw response body:', rawText);
+
+  // Dispatch a DOM event with raw response so UI components can show it
+  try {
+    if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+      (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, status: res.status, statusText: res.statusText } }));
+    }
+  } catch (e) {
+    /* ignore */
   }
-  const json = await res.json();
-  return json; // expected { text: string, pin_code: string, ... }
+
+  if (!res.ok) {
+    throw new Error(`Render scan failed: ${res.status} ${res.statusText} ${rawText}`);
+  }
+
+  // Try to parse JSON; if the server returned plain text or malformed JSON this
+  // will throw and be handled by callers. We log the parsed object too.
+  try {
+    const json = JSON.parse(rawText || '{}');
+    console.log('[aiService] Render scan parsed JSON:', json);
+    try {
+      if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+        (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, json, status: res.status } }));
+      }
+    } catch (e) { /* ignore */ }
+    return json; // expected shape documented below
+  } catch (e) {
+    console.error('[aiService] Failed to parse Render response as JSON:', e, rawText);
+    try {
+      if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+        (window as any).dispatchEvent(new CustomEvent('aiService:rawResponse', { detail: { raw: rawText, parseError: String(e), status: res.status } }));
+      }
+    } catch (ee) { /* ignore */ }
+    throw new Error(`Render scan returned invalid JSON: ${e?.message || e} -- raw: ${rawText}`);
+  }
 }
 
 export const extractMailData = async (

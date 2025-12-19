@@ -32,6 +32,8 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const [cnnLog, setCnnLog] = useState<string>("");
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isFallingBack, setIsFallingBack] = useState<string | null>(null);
+  const [rawResponseDebug, setRawResponseDebug] = useState<string | null>(null);
+  const [rawResponseJson, setRawResponseJson] = useState<any | null>(null);
   
   // Curated list of free/public models suitable for OCR / image-to-text or post-processing.
   // All Hugging Face calls via our server proxy still require `HF_API_KEY` set on the server (Vercel).
@@ -94,6 +96,21 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     return () => {
       window.removeEventListener('aiService:fallback', handler as EventListener);
     };
+  }, []);
+
+  // Listen for raw render responses so we can show them in the debug panel
+  useEffect(() => {
+    const onRaw = (ev: any) => {
+      try {
+        const d = ev?.detail || {};
+        if (d && d.raw) setRawResponseDebug(String(d.raw).slice(0, 10000));
+        if (d && d.json) setRawResponseJson(d.json);
+      } catch (e) {
+        // ignore
+      }
+    };
+    window.addEventListener('aiService:rawResponse', onRaw as EventListener);
+    return () => window.removeEventListener('aiService:rawResponse', onRaw as EventListener);
   }, []);
 
   // CNN Visualization Effect
@@ -440,6 +457,26 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
               {isFallingBack && (
                 <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700 flex items-center gap-2">
                   <span className="font-mono text-xs">{isFallingBack}</span>
+                </div>
+              )}
+
+              {/* Raw response debug panel (visible when server returns data) */}
+              {rawResponseDebug && (
+                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded text-sm text-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <strong className="text-xs text-slate-600">Server Response (raw)</strong>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { navigator.clipboard.writeText(rawResponseDebug || ''); }} className="text-xs px-2 py-1 bg-slate-100 rounded">Copy</button>
+                      <button onClick={() => { setRawResponseDebug(null); setRawResponseJson(null); }} className="text-xs px-2 py-1 bg-slate-100 rounded">Close</button>
+                    </div>
+                  </div>
+                  <pre className="whitespace-pre-wrap max-h-40 overflow-auto text-xs font-mono p-2 bg-white/60 rounded border border-slate-100">{rawResponseDebug}</pre>
+                  {rawResponseJson && (
+                    <details className="mt-2 text-xs text-slate-600">
+                      <summary className="cursor-pointer">Parsed JSON (click to expand)</summary>
+                      <pre className="whitespace-pre-wrap max-h-48 overflow-auto text-xs font-mono p-2 bg-white/60 rounded border border-slate-100 mt-2">{JSON.stringify(rawResponseJson, null, 2)}</pre>
+                    </details>
+                  )}
                 </div>
               )}
 
