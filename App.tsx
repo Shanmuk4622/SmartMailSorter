@@ -11,6 +11,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [history, setHistory] = useState<ScanResult[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCompactSidebar, setIsCompactSidebar] = useState(false);
 
   // Fetch data from Supabase on mount
   useEffect(() => {
@@ -54,7 +55,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
       {/* Sidebar - Vibrant Dark Theme */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-slate-300 transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 ${isCompactSidebar ? 'w-20' : 'w-72'} bg-gradient-to-b from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-slate-300 transform transition-all duration-300 ease-in-out md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 flex items-center gap-4 border-b border-indigo-900/30">
           <div className="relative group">
              <div className="absolute inset-0 bg-indigo-500 rounded-xl blur opacity-40 group-hover:opacity-60 transition-opacity"></div>
@@ -62,13 +63,28 @@ const App: React.FC = () => {
                <Mail className="w-6 h-6 text-white" />
              </div>
           </div>
-          <div>
-            <h1 className="text-white font-bold text-xl tracking-tight leading-none">SmartMail</h1>
-            <p className="text-xs text-indigo-300 font-medium mt-1">Sorter Pro v2.0</p>
+          {!isCompactSidebar && (
+            <div>
+              <h1 className="text-white font-bold text-xl tracking-tight leading-none">SmartMail</h1>
+              <p className="text-xs text-indigo-300 font-medium mt-1">Sorter Pro v2.0</p>
+            </div>
+          )}
+
+          <div className="ml-auto">
+            <button
+              aria-pressed={isCompactSidebar}
+              aria-label={isCompactSidebar ? 'Expand sidebar' : 'Compact sidebar'}
+              title={isCompactSidebar ? 'Expand sidebar' : 'Compact sidebar'}
+              onClick={() => setIsCompactSidebar(s => !s)}
+              className="p-2 rounded-md text-slate-200 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              {/* simple icon: use Menu for toggle */}
+              <Menu className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        <nav className="flex-1 p-6 space-y-3 mt-2">
+        <nav role="navigation" aria-label="Main menu" className="flex-1 p-6 space-y-3 mt-2">
           <p className="px-4 text-xs font-bold text-indigo-400/80 uppercase tracking-wider mb-2">Main Menu</p>
           <NavButton 
             active={currentView === AppView.DASHBOARD} 
@@ -77,6 +93,7 @@ const App: React.FC = () => {
             label="Dashboard"
             description="Overview & Stats"
             color="bg-blue-500"
+            compact={isCompactSidebar}
           />
           <NavButton 
             active={currentView === AppView.NETWORK} 
@@ -85,6 +102,7 @@ const App: React.FC = () => {
             label="Network"
             description="Topology & Status"
             color="bg-purple-500"
+            compact={isCompactSidebar}
           />
           <NavButton 
             active={currentView === AppView.SCANNER} 
@@ -93,6 +111,7 @@ const App: React.FC = () => {
             label="Scan & Sort"
             description="Process Envelopes"
             color="bg-emerald-500"
+            compact={isCompactSidebar}
           />
           <NavButton 
             active={currentView === AppView.HISTORY} 
@@ -101,6 +120,7 @@ const App: React.FC = () => {
             label="Log History"
             description="Archive & Exports"
             color="bg-amber-500"
+            compact={isCompactSidebar}
           />
         </nav>
 
@@ -189,10 +209,14 @@ const App: React.FC = () => {
   );
 };
 
-const NavButton = ({ active, onClick, icon, label, description, color }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, description: string, color: string }) => (
+const NavButton = ({ active, onClick, icon, label, description, color, compact }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, description: string, color: string, compact?: boolean }) => (
   <button
     onClick={onClick}
-    className={`w-full group flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+    aria-current={active ? 'page' : undefined}
+    aria-label={label}
+    title={compact ? label : undefined}
+    className={`w-full group flex items-center gap-4 ${compact ? 'justify-center' : 'px-4 py-3.5'} rounded-2xl transition-all duration-300 relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-500 ${
       active 
         ? `${color} text-white shadow-lg shadow-black/20` 
         : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
@@ -201,10 +225,12 @@ const NavButton = ({ active, onClick, icon, label, description, color }: { activ
     <div className={`p-2 rounded-xl transition-colors ${active ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500 group-hover:text-slate-300 group-hover:bg-slate-700'}`}>
       {icon}
     </div>
-    <div className="text-left">
-      <p className={`font-semibold text-sm ${active ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>{label}</p>
-      <p className={`text-xs ${active ? 'text-white/70' : 'text-slate-500 group-hover:text-slate-400'}`}>{description}</p>
-    </div>
+    {!compact && (
+      <div className="text-left">
+        <p className={`font-semibold text-sm ${active ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>{label}</p>
+        <p className={`text-xs ${active ? 'text-white/70' : 'text-slate-500 group-hover:text-slate-400'}`}>{description}</p>
+      </div>
+    )}
   </button>
 );
 
