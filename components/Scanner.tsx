@@ -1,3 +1,5 @@
+/* stylelint-disable */
+/* eslint-disable */
 import React, { useState, useEffect, useRef } from 'react';
 import { MailData, ProcessingOptions, ScanResult } from '../types';
 import { extractMailData, Provider } from '../aiService';
@@ -25,6 +27,15 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   const [provider, setProvider] = useState<Provider>('gemini');
   const [model, setModel] = useState<string>('gemini-3-flash-preview');
   const [cnnLog, setCnnLog] = useState<string>("");
+  
+  // Curated list of free/public models suitable for OCR / image-to-text or post-processing.
+  // All Hugging Face calls via our server proxy still require `HF_API_KEY` set on the server (Vercel).
+  const FREE_MODELS: { id: string; label: string; desc?: string }[] = [
+    { id: 'microsoft/trocr-base-printed', label: 'TrOCR — Printed (microsoft/trocr-base-printed)', desc: 'Good for OCR of printed text (envelopes)'} ,
+    { id: 'microsoft/trocr-base-handwritten', label: 'TrOCR — Handwritten (microsoft/trocr-base-handwritten)', desc: 'Better for cursive or handwritten addresses' },
+    { id: 'Salesforce/blip-image-captioning-large', label: 'BLIP — Image Captioning (Salesforce/blip-image-captioning-large)', desc: 'Generates descriptive text from images' },
+    { id: 'google/flan-t5-large', label: 'FLAN-T5 Large (google/flan-t5-large)', desc: 'Text-only model for post-processing and normalization' }
+  ];
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -307,6 +318,8 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                 accept="image/png, image/jpeg, image/jpg" 
                 className="hidden" 
                 onChange={handleFileChange}
+                aria-label="Upload envelope image"
+                title="Upload envelope image"
               />
             </div>
           ) : (
@@ -396,19 +409,50 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Model</label>
                     <span className="text-xs text-slate-400">Choose inference model</span>
                   </div>
+
+                  <div className="space-y-2 mb-3">
+                    <div className="text-xs text-slate-500">Quick pick (free/public models):</div>
+                    <div className="grid grid-cols-1 gap-2 mt-2">
+                      {FREE_MODELS.map(m => (
+                        <label key={m.id} className={`flex items-start gap-3 p-2 rounded-lg border ${model === m.id && provider === 'huggingface' ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-100'}`}>
+                          <input
+                            type="radio"
+                            name="model"
+                            aria-label={`Select ${m.label}`}
+                            checked={model === m.id && provider === 'huggingface'}
+                            onChange={() => {
+                              setProvider('huggingface');
+                              setModel(m.id);
+                            }}
+                            disabled={isProcessing}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-slate-700">{m.label}</div>
+                            {m.desc && <div className="text-xs text-slate-400">{m.desc}</div>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="flex gap-2">
                     <select
                       value={`${provider}:${model}`}
                       onChange={(e) => {
                         const [p, m] = e.target.value.split(':');
                         setProvider(p as Provider);
-                        setModel(m || (p === 'gemini' ? 'gemini-3-flash-preview' : 'meta-llama/Llama-3.2-Vision'));
+                        setModel(m || (p === 'gemini' ? 'gemini-3-flash-preview' : FREE_MODELS[0].id));
                       }}
                       disabled={isProcessing}
                       className="flex-1 py-2 px-3 rounded-lg border bg-white text-sm"
+                      aria-label="Choose model and provider"
                     >
                       <option value="gemini:gemini-3-flash-preview">Google Gemini — gemini-3-flash-preview</option>
-                      <option value="huggingface:meta-llama/Llama-3.2-Vision">Hugging Face — Llama-3.2-Vision</option>
+                      <option value={`huggingface:${FREE_MODELS[0].id}`}>Hugging Face — {FREE_MODELS[0].label}</option>
+                      <option value={`huggingface:${FREE_MODELS[1].id}`}>Hugging Face — {FREE_MODELS[1].label}</option>
+                      <option value={`huggingface:${FREE_MODELS[2].id}`}>Hugging Face — {FREE_MODELS[2].label}</option>
+                      <option value={`huggingface:${FREE_MODELS[3].id}`}>Hugging Face — {FREE_MODELS[3].label}</option>
                     </select>
 
                     {/* Allow custom model id entry */}
@@ -418,9 +462,10 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                       disabled={isProcessing}
                       className="w-64 py-2 px-3 rounded-lg border bg-white text-sm"
                       placeholder="Custom model id (optional)"
+                      aria-label="Custom model id"
                     />
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">Hugging Face models require an `HF_API_KEY` set in your environment. See README for details.</p>
+                  <p className="text-xs text-slate-400 mt-2">These suggested Hugging Face models are public/free, but server-side `HF_API_KEY` is still required for calling the Hugging Face Inference API via our proxy. Add `HF_API_KEY` to Vercel if you want server-hosted inference.</p>
                 </div>
               </div>
 

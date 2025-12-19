@@ -52,19 +52,21 @@ export const extractMailData = async (
     // For dev, we call the local proxied path `/api/hf/...` and let the dev
     // middleware inject the `HF_API_KEY`. Do NOT include the key in client
     // requests to avoid exposing it in the browser.
-    const modelId = model || 'meta-llama/Llama-3.2-Vision';
-    const endpoint = `/api/hf/models/${modelId}`;
+    const modelId = model || 'meta-llama/Llama-3.2-11B-Vision-Instruct';
+    const endpoint = `/api/hf/v1/chat/completions`;
 
-    console.log('[aiService] Sending request to Hugging Face model', modelId);
+    console.log('[aiService] Sending request to Hugging Face Router v1 chat', modelId);
 
     const prompt = `Analyze this image of a mail envelope. Perform Optical Character Recognition (OCR) to extract the recipient and address details. Based on the extracted PIN/ZIP code and City, classify this mail item into a logical Sorting Center. Return the result purely as a valid JSON object with exactly the following keys: recipient, address, pin_code, city, country, sorting_center_id, sorting_center_name, confidence. Confidence should be an integer 0-100.`;
 
+    // For vision-capable models we include the image as a data URI inside the user message.
+    const userContent = `Image: data:image/png;base64,${cleanBase64}\n\n${prompt}`;
+
     const payload = {
-      inputs: {
-        image: `data:image/png;base64,${cleanBase64}`,
-        text: prompt
-      },
-      options: { wait_for_model: true }
+      model: modelId,
+      messages: [
+        { role: 'user', content: userContent }
+      ]
     };
 
     const res = await fetch(endpoint, {
@@ -78,34 +80,31 @@ export const extractMailData = async (
     const text = await res.text();
     if (!res.ok) {
       console.error('[aiService] Hugging Face error response:', text);
+      if (res.status === 404) {
+        throw new Error(`Hugging Face model not found or inaccessible. Ensure the model '${modelId}' exists and your HF_API_KEY has access (accept license on https://huggingface.co/${encodeURIComponent(modelId)}).`);
+      }
       throw new Error(`Hugging Face inference failed: ${res.status} ${res.statusText}`);
     }
 
-    let jsonText = text || '{}';
-    if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
-    else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
+    const json = await res.json();
+    if (!res.ok) {
+      console.error('[aiService] Hugging Face error response JSON:', json);
+      if (res.status === 404) {
+        throw new Error(`Hugging Face model not found or inaccessible. Ensure the model '${modelId}' exists and your HF_API_KEY has access (accept license on https://huggingface.co/${encodeURIComponent(modelId)}).`);
+      }
+      throw new Error(`Hugging Face inference failed: ${res.status} ${res.statusText}`);
+    }
 
+    // Router v1 chat returns choices[].message.content similar to OpenAI
     try {
-      const parsed = JSON.parse(jsonText.trim());
+      const content = json.choices?.[0]?.message?.content || json.choices?.[0]?.message || json.output || json;
+      let maybeText = typeof content === 'string' ? content : JSON.stringify(content);
+      if (maybeText.includes('```json')) maybeText = maybeText.replace(/```json/g, '').replace(/```/g, '');
+      else if (maybeText.includes('```')) maybeText = maybeText.replace(/```/g, '');
+      const parsed = JSON.parse(maybeText.trim());
       return finalize(parsed);
     } catch (e) {
-      // Some HF models return an array or object wrapper
-      try {
-        const parsedAny = JSON.parse(text);
-        // If array, take first element's generated_text or similar
-        if (Array.isArray(parsedAny) && parsedAny.length > 0) {
-          const first = parsedAny[0];
-          const candidate = first.generated_text || first[0] || first;
-          if (typeof candidate === 'string') {
-            const cleaned = candidate.replace(/```json/g, '').replace(/```/g, '');
-            return finalize(JSON.parse(cleaned));
-          }
-          return finalize(candidate);
-        }
-      } catch (ee) {
-        console.error('[aiService] HF parsing fallback failed', ee);
-      }
-      console.error('[aiService] Failed to parse HF response as JSON:', jsonText);
+      console.error('[aiService] Failed to parse HF chat response as JSON:', e, json);
       throw new Error('Invalid JSON response from Hugging Face model.');
     }
   }

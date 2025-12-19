@@ -136,17 +136,24 @@ const App: React.FC = () => {
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label="Toggle menu"
+                title="Toggle menu"
                 className="md:hidden p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <div>
-                <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
-                  {currentView === AppView.DASHBOARD && 'Operational Dashboard'}
-                  {currentView === AppView.NETWORK && 'Network Overview'}
-                  {currentView === AppView.SCANNER && 'Envelope Processing'}
-                  {currentView === AppView.HISTORY && 'Scan Log'}
-                </h2>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100">
+                  <Mail className="w-5 h-5 text-indigo-600" aria-hidden />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+                    {currentView === AppView.DASHBOARD && 'Operational Dashboard'}
+                    {currentView === AppView.NETWORK && 'Network Overview'}
+                    {currentView === AppView.SCANNER && 'Envelope Processing'}
+                    {currentView === AppView.HISTORY && 'Scan Log'}
+                  </h2>
+                </div>
               </div>
             </div>
             
@@ -155,7 +162,7 @@ const App: React.FC = () => {
                 <span className="text-sm font-semibold text-slate-700">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
                 <span className="text-xs text-slate-500">NYC-HUB-01</span>
               </div>
-              <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all relative">
+              <button aria-label="Notifications" title="Notifications" className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all relative">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
               </button>

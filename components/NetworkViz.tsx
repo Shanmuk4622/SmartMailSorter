@@ -29,19 +29,24 @@ const NetworkViz: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string }>({ visible: false, x: 0, y: 0, text: '' });
+  const [metrics, setMetrics] = useState({ totalHubs: 0, activeRoutes: 0, uptime: '99.9%' });
 
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return;
 
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    // Helper to (re)build the visualization when the container has non-zero size.
+    const build = () => {
+      const width = Math.max(300, containerRef.current!.clientWidth);
+      const height = Math.max(200, containerRef.current!.clientHeight);
 
-    // Clear previous
-    d3.select(svgRef.current).selectAll("*").remove();
+      // Clear previous
+      d3.select(svgRef.current).selectAll("*").remove();
 
-    const svg = d3.select(svgRef.current)
-      .attr("viewBox", [0, 0, width, height])
-      .attr("class", "w-full h-full");
+      const svg = d3.select(svgRef.current)
+        .attr("viewBox", [0, 0, width, height])
+        .attr("class", "w-full h-full")
+        .attr('preserveAspectRatio', 'xMidYMid meet');
 
     // Define Filters & Gradients
     const defs = svg.append("defs");
@@ -115,7 +120,7 @@ const NetworkViz: React.FC = () => {
         particles.push({
           link,
           t: Math.random(), // Start at random position
-          speed: 0.002 + Math.random() * 0.004 // Random speed
+          speed: 0.002 + Math.random() * 0.006 // Random speed
         });
       }
     });
@@ -132,15 +137,16 @@ const NetworkViz: React.FC = () => {
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));
 
-    // Links Layer
+    // Links Layer (width indicates capacity/load)
     const linkGroup = svg.append("g")
       .attr("class", "links")
       .selectAll("line")
       .data(links)
       .join("line")
       .attr("stroke", "#334155")
-      .attr("stroke-width", d => Math.sqrt(d.value))
-      .attr("opacity", 0.4);
+      .attr("stroke-width", d => 1 + Math.sqrt(d.value))
+      .attr("opacity", 0.45)
+      .attr('stroke-linecap', 'round');
 
     // Particles Layer
     const particleGroup = svg.append("g").attr("class", "particles");
@@ -215,16 +221,16 @@ const NetworkViz: React.FC = () => {
         return "#94a3b8";
       });
 
-    // Labels
+    // Labels - show for all nodes, hubs emphasized
     nodeGroup.append("text")
-      .text(d => d.type === 'HUB' ? d.label.toUpperCase() : '')
+      .text(d => d.type === 'HUB' ? d.label.toUpperCase() : d.label)
       .attr("text-anchor", "middle")
-      .attr("dy", -35)
-      .attr("fill", "#e2e8f0")
-      .attr("font-size", "10px")
-      .attr("font-weight", "bold")
-      .attr("letter-spacing", "1px")
-      .style("text-shadow", "0 2px 4px rgba(0,0,0,0.8)");
+      .attr("dy", d => d.type === 'HUB' ? -35 : -18)
+      .attr("fill", d => d.type === 'HUB' ? "#e2e8f0" : "#94a3b8")
+      .attr("font-size", d => d.type === 'HUB' ? "10px" : "9px")
+      .attr("font-weight", d => d.type === 'HUB' ? "bold" : "600")
+      .attr("letter-spacing", d => d.type === 'HUB' ? "1px" : "0.2px")
+      .style("text-shadow", "0 2px 4px rgba(0,0,0,0.6)");
 
     simulation.on("tick", () => {
       // Update Lines
@@ -265,14 +271,58 @@ const NetworkViz: React.FC = () => {
       d.fy = event.y;
     }
 
-    function dragended(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    }
+
+    // Simulate changing load and update metrics periodically
+    const metricInterval = setInterval(() => {
+      // Randomly tweak link values and particle speeds to simulate traffic
+      links.forEach(l => {
+        const jitter = (Math.random() - 0.4) * 1.2;
+        l.value = Math.max(1, Math.min(12, (l.value || 3) + jitter));
+      });
+      particleCircles.data().forEach((p: any) => {
+        p.speed = 0.002 + Math.random() * 0.006 + (p.link.value || 0) * 0.0003;
+      });
+      // Update link stroke widths to reflect new values
+      linkGroup.data(links).attr("stroke-width", d => 1 + Math.sqrt(d.value));
+
+      // Update metrics state
+      const totalHubs = nodes.filter(n => n.type === 'HUB').length;
+      const activeRoutes = links.length;
+      const uptime = (99.5 + Math.random() * 0.5).toFixed(2) + '%';
+      setMetrics({ totalHubs, activeRoutes, uptime });
+    }, 2000);
 
     return () => {
+      clearInterval(metricInterval);
       simulation.stop();
+    };
+    }
+
+      return () => {
+        simulation.stop();
+      };
+    };
+    // Build now
+    const maybeCleanup = build();
+
+    // Watch for container size changes and rebuild visualization when necessary
+    const ro = new ResizeObserver(() => {
+      // Rebuild on resize — stop previous simulation and recreate
+      const cleanup = build();
+      if (typeof cleanup === 'function') cleanup();
+    });
+    ro.observe(containerRef.current);
+
+    // Window resize fallback
+    const onWin = () => {
+      const cleanup = build();
+      if (typeof cleanup === 'function') cleanup();
+    };
+    window.addEventListener('resize', onWin);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onWin);
     };
   }, []);
 
@@ -324,9 +374,9 @@ const NetworkViz: React.FC = () => {
               <h3 className="font-bold text-lg">System Metrics</h3>
             </div>
             <div className="space-y-3">
-               <MetricRow label="Total Hubs" value="4" />
-               <MetricRow label="Active Routes" value="12" />
-               <MetricRow label="Uptime" value="99.9%" />
+              <MetricRow label="Total Hubs" value={`${metrics.totalHubs}`} />
+              <MetricRow label="Active Routes" value={`${metrics.activeRoutes}`} />
+              <MetricRow label="Uptime" value={`${metrics.uptime}`} />
             </div>
           </div>
         </div>
@@ -346,7 +396,7 @@ const NetworkViz: React.FC = () => {
                   selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
                 }`}></div>
                 
-                <p className="text-xs font-mono text-slate-400 mb-2">{selectedNode.type}_ID: {selectedNode.id}</p>
+                  <p className="text-xs font-mono text-slate-400 mb-2">{selectedNode.type}_ID: {selectedNode.id}</p>
                 <h2 className="text-2xl font-bold mb-1">{selectedNode.label}</h2>
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
@@ -354,6 +404,16 @@ const NetworkViz: React.FC = () => {
                      selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
                   }`}></div>
                   <span className="text-sm font-medium uppercase tracking-wider">{selectedNode.status}</span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Queue</p>
+                    <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 300)}</p>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Latency</p>
+                    <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 80) + 5}ms</p>
+                  </div>
                 </div>
               </div>
 

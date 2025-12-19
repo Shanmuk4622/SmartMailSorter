@@ -20,4 +20,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ve1GE9xbhyFl80fFx-66Vk
    `npm run dev`
 
 Hugging Face notes:
-- If you want to use Hugging Face models (e.g., Llama-3.2-Vision) set `HF_API_KEY` in your `.env.local` (or use the provided example `.env.example`). Get a token from https://huggingface.co/settings/tokens and create a new "Read" or "Inference" token. The app will read `HF_API_KEY` at build time.
+- If you want to use Hugging Face models set `HF_API_KEY` in your `.env.local` (or use the provided example `.env.example`). Get a token from https://huggingface.co/settings/tokens and create a new "Read" or "Inference" token. For gated models like Llama-3.2-11B-Vision you must accept the model license on Hugging Face before the token can access it. The app will read `HF_API_KEY` at build/deploy time.
+
+Recommended free/public models included in the app:
+
+- `microsoft/trocr-base-printed` — TrOCR for printed text (good for envelopes)
+- `microsoft/trocr-base-handwritten` — TrOCR for handwritten text
+- `Salesforce/blip-image-captioning-large` — BLIP for image captioning
+- `google/flan-t5-large` — FLAN-T5 for general text processing/post-processing
+
+Note: Even for these public models, calls to the Hugging Face Inference API from the server require an `HF_API_KEY`. Keep the key in Vercel as a server secret (`HF_API_KEY`) and do not expose it to the client.

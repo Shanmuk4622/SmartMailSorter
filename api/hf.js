@@ -12,7 +12,8 @@ export default async function handler(req, res) {
 
     // Compute target path by stripping /api/hf prefix
     const targetPath = (req.url || '').replace(/^\/api\/hf/, '') || '/';
-    const target = `https://api-inference.huggingface.co${targetPath}`;
+    // Use the new Hugging Face Router endpoint
+    const target = `https://router.huggingface.co${targetPath}`;
 
     // Collect request body
     const chunks = [];

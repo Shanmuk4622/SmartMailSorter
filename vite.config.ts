@@ -12,7 +12,11 @@ export default defineConfig(({ mode }) => {
 			server.middlewares.use('/api/hf', async (req: any, res: any) => {
 				try {
 					const targetPath = (req.url || '').replace(/^\/api\/hf/, '');
-					const target = `https://api-inference.huggingface.co${targetPath}`;
+					// Decode the incoming path (frontend will URL-encode model IDs)
+					// so we forward a clean path to the Hugging Face Router.
+					const decodedPath = decodeURIComponent(targetPath);
+					// Use the Hugging Face Router endpoint for model invocations.
+					const target = `https://router.huggingface.co${decodedPath}`;
 
 					// Collect request body
 					const chunks: Uint8Array[] = [];
@@ -22,7 +26,8 @@ export default defineConfig(({ mode }) => {
 					// Build headers and inject HF key from local env (dev only)
 					const headers: Record<string, string> = {};
 					if (req.headers['content-type']) headers['content-type'] = String(req.headers['content-type']);
-					if (HF_KEY) headers['authorization'] = `Bearer ${HF_KEY}`;
+					// Use the standard 'Authorization' header name (capitalized).
+					if (HF_KEY) headers['Authorization'] = `Bearer ${HF_KEY}`;
 
 					const fetchRes = await fetch(target, {
 						method: req.method,
