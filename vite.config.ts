@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
 	const hfProxyPlugin = (): Plugin => ({
 		name: 'vite:hf-proxy',
 		configureServer(server) {
-			server.middlewares.use('/api/hf', async (req: any, res: any) => {
+				server.middlewares.use('/api/hf', async (req: any, res: any) => {
 				try {
 					const targetPath = (req.url || '').replace(/^\/api\/hf/, '');
 					// Decode the incoming path (frontend will URL-encode model IDs)
@@ -48,6 +48,41 @@ export default defineConfig(({ mode }) => {
 					try { res.statusCode = 502; res.end('Proxy error'); } catch (e) {}
 				}
 			});
+
+				// Proxy for external scan endpoint to avoid CORS during local development.
+				server.middlewares.use('/api/scan', async (req: any, res: any) => {
+					try {
+						const target = env.RENDER_SCAN_URL || 'https://spindlier-diamond-remotely.ngrok-free.dev/scan';
+						console.log(`[vite:scan-proxy] ${req.method} ${req.url} -> ${target}`);
+						// Collect request body
+						const chunks: Uint8Array[] = [];
+						for await (const chunk of req) chunks.push(chunk);
+						const body = chunks.length ? Buffer.concat(chunks) : undefined;
+
+						const headers: Record<string, string> = {};
+						if (req.headers['content-type']) headers['content-type'] = String(req.headers['content-type']);
+
+						const fetchRes = await fetch(target, {
+							method: req.method,
+							headers,
+							body
+						});
+
+						res.statusCode = fetchRes.status;
+						console.log(`[vite:scan-proxy] response ${fetchRes.status} ${fetchRes.statusText} for ${req.url}`);
+						fetchRes.headers.forEach((value, key) => {
+							try { res.setHeader(key, value); } catch (e) {}
+						});
+						// ensure browser can receive the response
+						res.setHeader('Access-Control-Allow-Origin', '*');
+
+						const arrayBuffer = await fetchRes.arrayBuffer();
+						res.end(Buffer.from(arrayBuffer));
+					} catch (err) {
+						console.error('[vite:scan-proxy] proxy error', err);
+						try { res.statusCode = 502; res.end('Scan proxy error'); } catch (e) {}
+					}
+				});
 		}
 	});
 

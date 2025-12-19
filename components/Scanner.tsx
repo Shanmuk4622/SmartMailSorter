@@ -26,7 +26,11 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
   });
   const [provider, setProvider] = useState<Provider>('gemini');
   const [model, setModel] = useState<string>('gemini-3-flash-preview');
+  const [renderUrl, setRenderUrl] = useState<string>(() => {
+    try { return localStorage.getItem('RENDER_SCAN_URL') || '/api/scan'; } catch { return '/api/scan'; }
+  });
   const [cnnLog, setCnnLog] = useState<string>("");
+  const [renderError, setRenderError] = useState<string | null>(null);
   
   // Curated list of free/public models suitable for OCR / image-to-text or post-processing.
   // All Hugging Face calls via our server proxy still require `HF_API_KEY` set on the server (Vercel).
@@ -35,6 +39,11 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     { id: 'microsoft/trocr-base-handwritten', label: 'TrOCR — Handwritten (microsoft/trocr-base-handwritten)', desc: 'Better for cursive or handwritten addresses' },
     { id: 'Salesforce/blip-image-captioning-large', label: 'BLIP — Image Captioning (Salesforce/blip-image-captioning-large)', desc: 'Generates descriptive text from images' },
     { id: 'google/flan-t5-large', label: 'FLAN-T5 Large (google/flan-t5-large)', desc: 'Text-only model for post-processing and normalization' }
+  ];
+
+  // Add Render-backed model entry (my-model)
+  const RENDER_MODELS: { id: string; label: string; desc?: string }[] = [
+    { id: 'my-model', label: 'my-model (Render / EasyOCR)', desc: 'Runs your EasyOCR FastAPI service deployed on Render. Use when you want OCR focused PIN extraction.' }
   ];
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +62,10 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
       console.warn("Failed to load saved scanner state:", e);
     }
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('RENDER_SCAN_URL', renderUrl || ''); } catch (e) { /* ignore */ }
+  }, [renderUrl]);
 
   useEffect(() => {
     try {
@@ -211,7 +224,9 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     const start = Date.now();
 
     try {
-      const data = await extractMailData(processedImage, { provider, model });
+      // If the selected model is the special "my-model", force the render provider
+      const providerForCall = (model === 'my-model' || provider === 'render') ? 'render' as Provider : provider;
+      const data = await extractMailData(processedImage, { provider: providerForCall, model, renderUrl });
       setResult(data);
       
       const safeConfidence = Math.round(data.confidence);
@@ -248,11 +263,22 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
     } catch (err: any) {
       let msg = "An unexpected error occurred.";
-      if (err.message) {
-        if (err.message.includes("fetch failed") || err.message.includes("NetworkError")) msg = "Network connection failed.";
-        else if (err.message.includes("Invalid JSON")) msg = "Could not read address. Try a clearer photo.";
-        else if (err.message.includes("API key")) msg = "Invalid API Key.";
-        else msg = `Extraction failed: ${err.message}`;
+      const em = err?.message || String(err);
+      // capture render-specific/network errors for extra UI
+      if (provider === 'render') {
+        setRenderError(em);
+      } else {
+        setRenderError(null);
+      }
+
+      if (em) {
+        if (em.includes("fetch failed") || em.includes("NetworkError") || em.includes('Failed to fetch')) msg = "Network connection failed.";
+        else if (em.includes('Network or CORS error') || em.includes('CORS') || em.includes('Access-Control-Allow-Origin')) {
+          msg = 'Request blocked by CORS or network issue. Ensure your Render service allows this origin or use a server-side proxy; also verify the Render URL.';
+        }
+        else if (em.includes("Invalid JSON")) msg = "Could not read address. Try a clearer photo.";
+        else if (em.includes("API key")) msg = "Invalid API Key.";
+        else msg = `Extraction failed: ${em}`;
       }
       setError(msg);
     } finally {
@@ -376,6 +402,16 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                   <div>
                     <span className="font-bold block mb-1">Processing Error</span>
                     {error}
+                    {renderError && (
+                      <div className="mt-3 text-xs text-slate-600 bg-white/10 p-2 rounded border border-slate-100">
+                        <div className="font-mono text-xs mb-2">Details: {renderError}</div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setError(null); setRenderError(null); handleScan(); }} className="px-2 py-1 text-xs bg-blue-600 text-white rounded">Retry</button>
+                          <button onClick={() => { setProvider('gemini'); setModel('gemini-3-flash-preview'); setError(null); setRenderError(null); }} className="px-2 py-1 text-xs bg-slate-700 text-white rounded">Use local model</button>
+                          <a target="_blank" rel="noreferrer" href={renderUrl} className="px-2 py-1 text-xs bg-slate-100 text-slate-800 rounded">Open endpoint</a>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -433,6 +469,27 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                           </div>
                         </label>
                       ))}
+                      {/* Render model quick pick */}
+                      {RENDER_MODELS.map(m => (
+                        <label key={m.id} className={`flex items-start gap-3 p-2 rounded-lg border ${model === m.id && provider === 'render' ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-100'}`}>
+                          <input
+                            type="radio"
+                            name="model"
+                            aria-label={`Select ${m.label}`}
+                            checked={model === m.id && provider === 'render'}
+                            onChange={() => {
+                              setProvider('render');
+                              setModel(m.id);
+                            }}
+                            disabled={isProcessing}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-slate-700">{m.label}</div>
+                            {m.desc && <div className="text-xs text-slate-400">{m.desc}</div>}
+                          </div>
+                        </label>
+                      ))}
                     </div>
                   </div>
 
@@ -453,6 +510,7 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                       <option value={`huggingface:${FREE_MODELS[1].id}`}>Hugging Face — {FREE_MODELS[1].label}</option>
                       <option value={`huggingface:${FREE_MODELS[2].id}`}>Hugging Face — {FREE_MODELS[2].label}</option>
                       <option value={`huggingface:${FREE_MODELS[3].id}`}>Hugging Face — {FREE_MODELS[3].label}</option>
+                      <option value={`render:${RENDER_MODELS[0].id}`}>Render — {RENDER_MODELS[0].label}</option>
                     </select>
 
                     {/* Allow custom model id entry */}
@@ -464,6 +522,20 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
                       placeholder="Custom model id (optional)"
                       aria-label="Custom model id"
                     />
+                    {/* Render URL input shown when Render provider selected */}
+                    {provider === 'render' && (
+                      <div className="mt-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Render Service URL</label>
+                        <input
+                          value={renderUrl}
+                          onChange={(e) => setRenderUrl(e.target.value)}
+                          placeholder="https://your-service-name.onrender.com/scan"
+                          className="w-full mt-1 py-2 px-3 rounded-lg border bg-white text-sm"
+                          aria-label="Render service URL"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Provide your FastAPI /scan endpoint. Stored locally.</p>
+                      </div>
+                    )}
                   </div>
                   <p className="text-xs text-slate-400 mt-2">These suggested Hugging Face models are public/free, but server-side `HF_API_KEY` is still required for calling the Hugging Face Inference API via our proxy. Add `HF_API_KEY` to Vercel if you want server-hosted inference.</p>
                 </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { RefreshCw, Zap, Server, Activity, Database } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 interface NetworkNode extends d3.SimulationNodeDatum {
   id: string;
@@ -25,15 +26,28 @@ interface Particle {
   speed: number;
 }
 
+// small helper
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
 const NetworkViz: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string }>({ visible: false, x: 0, y: 0, text: '' });
   const [metrics, setMetrics] = useState({ totalHubs: 0, activeRoutes: 0, uptime: '99.9%' });
+  // Layout controls (user-tunable)
+  // `dynamicLayout` when true means locals are free to move (dynamic); when false locals are pinned.
+  const [dynamicLayout, setDynamicLayout] = useState<boolean>(true);
+  const [chargeStrength, setChargeStrength] = useState<number>(-400);
+  const [linkDistanceBase, setLinkDistanceBase] = useState<number>(200);
+  const [hubPositionsOverride, setHubPositionsOverride] = useState<Record<string, { x: number; y: number }> | null>(null);
+  const [hubLabelOverride, setHubLabelOverride] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return;
+
+    // Track current cleanup so rebuilds call previous cleanup first
+    let currentCleanup: (() => void) | null = null;
 
     // Helper to (re)build the visualization when the container has non-zero size.
     const build = () => {
@@ -96,6 +110,28 @@ const NetworkViz: React.FC = () => {
       { id: "LOC-PS", type: "LOCAL", status: "idle", label: "Pasadena" },
     ];
 
+    // Apply label overrides from logs when available. We try direct id match first,
+    // otherwise attempt a loose match by checking whether the override key appears
+    // in the existing label or id (case-insensitive).
+    if (hubLabelOverride) {
+      nodes.forEach(n => {
+        const direct = hubLabelOverride[n.id];
+        if (direct) {
+          n.label = direct;
+          return;
+        }
+        // loose match: find an override whose key is substring of current label or id
+        const found = Object.entries(hubLabelOverride).find(([k, v]) => {
+          if (!k) return false;
+          const kl = k.toLowerCase();
+          const lab = (n.label || '').toLowerCase();
+          const idl = (n.id || '').toLowerCase();
+          return kl && (lab.includes(kl) || idl.includes(kl) || kl.includes(lab) || kl.includes(idl));
+        });
+        if (found) n.label = found[1];
+      });
+    }
+
     const links: NetworkLink[] = [
       { source: "HUB-NYC", target: "HUB-CHI", value: 5 },
       { source: "HUB-NYC", target: "HUB-LAX", value: 3 },
@@ -110,6 +146,63 @@ const NetworkViz: React.FC = () => {
       { source: "HUB-LAX", target: "LOC-LB", value: 6 },
       { source: "HUB-LAX", target: "LOC-PS", value: 2 },
     ];
+
+    // === Positioning: assign meaningful geographic-like coordinates ===
+    // Default hub positions (fractions of width/height). Can be overridden by logs.
+    const defaultHubPositions: Record<string, { x: number; y: number }> = {
+      'HUB-NYC': { x: 0.22, y: 0.30 },
+      'HUB-CHI': { x: 0.48, y: 0.36 },
+      'HUB-LAX': { x: 0.78, y: 0.42 },
+      'HUB-MIA': { x: 0.66, y: 0.76 },
+    };
+
+    const hubPositions = hubPositionsOverride ?? defaultHubPositions;
+
+    // Apply absolute coordinates for hubs and initial local placements near their hub
+    nodes.forEach(n => {
+      if (n.type === 'HUB') {
+        const pos = hubPositions[n.id];
+        if (pos) {
+          n.x = width * pos.x;
+          n.y = height * pos.y;
+          // Fix hubs so they remain stable anchors
+          n.fx = n.x;
+          n.fy = n.y;
+        }
+      }
+    });
+
+    // Helper to find node by id
+    const findNode = (id: string) => nodes.find(n => n.id === id) as NetworkNode | undefined;
+
+    // For each link connecting a HUB to a LOCAL, place the local near the hub
+    links.forEach(l => {
+      const srcId = typeof l.source === 'string' ? l.source : (l.source as NetworkNode).id;
+      const tgtId = typeof l.target === 'string' ? l.target : (l.target as NetworkNode).id;
+
+      // If one end is hub and the other is local, position local near hub
+      const hubId = srcId.startsWith('HUB-') ? srcId : tgtId.startsWith('HUB-') ? tgtId : null;
+      const locId = srcId.startsWith('LOC-') ? srcId : tgtId.startsWith('LOC-') ? tgtId : null;
+      if (hubId && locId) {
+        const hub = findNode(hubId);
+        const local = findNode(locId);
+          if (hub && local) {
+          // place local at a small random offset around hub so they don't overlap exactly
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 40 + Math.random() * 60;
+          local.x = (hub.x ?? width / 2) + Math.cos(angle) * radius;
+          local.y = (hub.y ?? height / 2) + Math.sin(angle) * radius;
+            // pin or allow locals to be free based on control (dynamicLayout true => free)
+            if (!dynamicLayout) {
+              local.fx = local.x;
+              local.fy = local.y;
+            } else {
+              local.fx = null;
+              local.fy = null;
+            }
+        }
+      }
+    });
 
     // Initialize Particles
     const particles: Particle[] = [];
@@ -131,9 +224,10 @@ const NetworkViz: React.FC = () => {
         const targetNode: NetworkNode | undefined = typeof d.target === 'object'
           ? d.target as NetworkNode
           : nodes.find(n => n.id === d.target);
-        return targetNode && targetNode.type === 'LOCAL' ? 80 : 200;
+        // use configurable base distance; locals are closer
+        return targetNode && targetNode.type === 'LOCAL' ? Math.max(40, linkDistanceBase * 0.4) : linkDistanceBase;
       }))
-      .force("charge", d3.forceManyBody().strength(-400))
+      .force("charge", d3.forceManyBody().strength(chargeStrength))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));
 
@@ -236,30 +330,37 @@ const NetworkViz: React.FC = () => {
       .attr("letter-spacing", d => d.type === 'HUB' ? "1px" : "0.2px")
       .style("text-shadow", "0 2px 4px rgba(0,0,0,0.6)");
 
+    // Helper to safely resolve coordinates whether link endpoints are ids or node objects
+    const resolveCoord = (end: string | NetworkNode, coord: 'x' | 'y') => {
+      if (typeof end === 'object') return (end as NetworkNode)[coord] ?? 0;
+      const found = nodes.find(n => n.id === end);
+      return found ? (found as any)[coord] ?? 0 : 0;
+    };
+
     simulation.on("tick", () => {
-      // Update Lines
+      // Update Lines (defensive: resolve both id and object cases)
       linkGroup
-        .attr("x1", d => (d.source as NetworkNode).x!)
-        .attr("y1", d => (d.source as NetworkNode).y!)
-        .attr("x2", d => (d.target as NetworkNode).x!)
-        .attr("y2", d => (d.target as NetworkNode).y!);
+        .attr("x1", d => resolveCoord((d.source as any), 'x'))
+        .attr("y1", d => resolveCoord((d.source as any), 'y'))
+        .attr("x2", d => resolveCoord((d.target as any), 'x'))
+        .attr("y2", d => resolveCoord((d.target as any), 'y'));
 
-      // Update Nodes
+      // Update Nodes (guard against undefined coordinates)
       nodeGroup
-        .attr("transform", d => `translate(${d.x},${d.y})`);
+        .attr("transform", d => `translate(${d.x ?? 0},${d.y ?? 0})`);
 
-      // Update Particles
+      // Update Particles (use resolver for endpoints)
       particleCircles
         .attr("cx", d => {
           d.t += d.speed;
           if (d.t > 1) d.t = 0;
-          const sx = (d.link.source as NetworkNode).x!;
-          const tx = (d.link.target as NetworkNode).x!;
+          const sx = resolveCoord((d.link.source as any), 'x');
+          const tx = resolveCoord((d.link.target as any), 'x');
           return sx + (tx - sx) * d.t;
         })
         .attr("cy", d => {
-          const sy = (d.link.source as NetworkNode).y!;
-          const ty = (d.link.target as NetworkNode).y!;
+          const sy = resolveCoord((d.link.source as any), 'y');
+          const ty = resolveCoord((d.link.target as any), 'y');
           return sy + (ty - sy) * d.t;
         });
     });
@@ -308,29 +409,30 @@ const NetworkViz: React.FC = () => {
     };
     };
 
-    // Build now
-    const maybeCleanup = build();
+    // Build now and keep its cleanup
+    currentCleanup = build();
 
     // Watch for container size changes and rebuild visualization when necessary
     const ro = new ResizeObserver(() => {
-      // Rebuild on resize — stop previous simulation and recreate
-      const cleanup = build();
-      if (typeof cleanup === 'function') cleanup();
+      // Call previous cleanup then rebuild and keep new cleanup
+      if (typeof currentCleanup === 'function') currentCleanup();
+      currentCleanup = build();
     });
     ro.observe(containerRef.current);
 
     // Window resize fallback
     const onWin = () => {
-      const cleanup = build();
-      if (typeof cleanup === 'function') cleanup();
+      if (typeof currentCleanup === 'function') currentCleanup();
+      currentCleanup = build();
     };
     window.addEventListener('resize', onWin);
 
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', onWin);
+      if (typeof currentCleanup === 'function') currentCleanup();
     };
-  }, []);
+  }, [dynamicLayout, chargeStrength, linkDistanceBase, hubPositionsOverride]);
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-6">
@@ -347,7 +449,7 @@ const NetworkViz: React.FC = () => {
          </div>
          
          {/* Graph Container */}
-         <div ref={containerRef} className="w-full h-full cursor-move bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
+         <div ref={containerRef} className="w-full h-[640px] cursor-move bg-gradient-to-b from-slate-900 via-slate-950 to-black">
            <svg ref={svgRef} className="w-full h-full"></svg>
          </div>
 
@@ -385,6 +487,95 @@ const NetworkViz: React.FC = () => {
               <MetricRow label="Uptime" value={`${metrics.uptime}`} />
             </div>
           </div>
+        </div>
+
+        {/* Layout Controls */}
+        <div className="bg-slate-900/90 rounded-2xl p-4 text-white border border-slate-700">
+          <h4 className="text-xs font-bold text-slate-300 mb-2">Layout Controls</h4>
+          <div className="flex items-center justify-between mb-2 text-xs text-slate-300">
+            <span>Dynamic Layout</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only" checked={dynamicLayout} onChange={(e) => setDynamicLayout(e.target.checked)} />
+              <div className={`w-9 h-5 rounded-full transition-colors ${dynamicLayout ? 'bg-emerald-500' : 'bg-slate-700'}`}></div>
+            </label>
+          </div>
+            <div className="flex gap-2 mb-2">
+            <button onClick={async () => {
+              // Fetch recent scan logs and create hub positions automatically
+              // Prefer latitude/longitude when available and map to normalized coordinates
+              try {
+                const { data, error } = await supabase
+                  .from('mail_scans')
+                  .select('sorting_center_id, sorting_center_name, latitude, longitude')
+                  .limit(1000);
+                if (error) throw error;
+                if (!data || data.length === 0) return;
+
+                // collect rows that have lat/lon
+                const rows = (data as any[]).map(r => ({
+                  id: r.sorting_center_id || r.sorting_center_name,
+                  name: r.sorting_center_name || r.sorting_center_id,
+                  lat: r.latitude !== undefined && r.latitude !== null ? Number(r.latitude) : null,
+                  lon: r.longitude !== undefined && r.longitude !== null ? Number(r.longitude) : null,
+                }));
+
+                // compute bounds for available coords
+                const withCoords = rows.filter(r => r.lat !== null && r.lon !== null);
+                const override: Record<string, { x: number; y: number }> = {};
+
+                if (withCoords.length > 0) {
+                  const lats = withCoords.map(r => r.lat as number);
+                  const lons = withCoords.map(r => r.lon as number);
+                  const minLat = Math.min(...lats);
+                  const maxLat = Math.max(...lats);
+                  const minLon = Math.min(...lons);
+                  const maxLon = Math.max(...lons);
+
+                  // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
+                  const normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
+                  const normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
+
+                  // assign positions using the provided id/name as the override key
+                  rows.forEach(r => {
+                    if (r.lat === null || r.lon === null) return;
+                    const xFrac = clamp(normX(r.lon as number), 0.05, 0.95);
+                    const yFrac = clamp(normY(r.lat as number), 0.05, 0.95);
+                    override[String(r.id)] = { x: xFrac, y: yFrac };
+                  });
+
+                } else {
+                  // fallback: no coords available, place hubs evenly around a circle
+                  const ids = Array.from(new Set(rows.map(r => r.id)));
+                  const centerX = 0.5; const centerY = 0.45; const radiusFrac = 0.30;
+                  ids.forEach((id, i) => {
+                    const angle = (i / ids.length) * Math.PI * 2;
+                    override[id.toString()] = {
+                      x: centerX + Math.cos(angle) * radiusFrac,
+                      y: centerY + Math.sin(angle) * radiusFrac
+                    };
+                  });
+                }
+
+                setHubPositionsOverride(override);
+                // also keep a mapping of id->label from logs so we can rename nodes
+                const labelMap: Record<string, string> = {};
+                rows.forEach(r => {
+                  if (r.name) labelMap[String(r.id)] = r.name;
+                });
+                setHubLabelOverride(labelMap);
+                // set dynamic layout to true so nodes can settle around hubs
+                setDynamicLayout(true);
+              } catch (err) {
+                // ignore errors silently for now
+                console.error('Load logs failed', err);
+              }
+            }} className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs">Load From Logs</button>
+            <button onClick={() => setHubPositionsOverride(null)} className="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs">Reset Hubs</button>
+          </div>
+          <div className="text-xs text-slate-300 mb-2">Repel Strength: {chargeStrength}</div>
+          <input type="range" min={-1200} max={-50} value={chargeStrength} onChange={(e) => setChargeStrength(Number(e.target.value))} className="w-full mb-3" />
+          <div className="text-xs text-slate-300 mb-2">Link Distance: {linkDistanceBase}px</div>
+          <input type="range" min={60} max={400} value={linkDistanceBase} onChange={(e) => setLinkDistanceBase(Number(e.target.value))} className="w-full" />
         </div>
 
         {/* Node Details */}

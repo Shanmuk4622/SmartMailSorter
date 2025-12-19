@@ -36,14 +36,50 @@ const finalize = (data: any): MailData => {
   return out as MailData;
 };
 
-export type Provider = 'gemini' | 'huggingface';
+export type Provider = 'gemini' | 'huggingface' | 'render';
+
+// Helper: convert data URL to Blob
+const dataURLToBlob = (dataURL: string) => {
+  const parts = dataURL.split(',');
+  const meta = parts[0];
+  const base64 = parts[1];
+  const mime = meta.match(/:(.*?);/)?.[1] || 'image/png';
+  const binary = atob(base64);
+  const len = binary.length;
+  const u8 = new Uint8Array(len);
+  for (let i = 0; i < len; i++) u8[i] = binary.charCodeAt(i);
+  return new Blob([u8], { type: mime });
+};
+
+// Call the Render-hosted FastAPI scanning endpoint. The URL can be set via
+// the RENDER_SCAN_URL env var or falls back to a placeholder you should replace.
+export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?: string) {
+  const RENDER_SCAN_URL = renderUrl || (process as any)?.env?.RENDER_SCAN_URL || 'https://spindlier-diamond-remotely.ngrok-free.dev/scan';
+  const blob = dataURLToBlob(dataUrl);
+  const file = new File([blob], 'envelope.png', { type: blob.type });
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(RENDER_SCAN_URL, {
+    method: 'POST',
+    body: formData
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Render scan failed: ${res.status} ${res.statusText} ${txt}`);
+  }
+  const json = await res.json();
+  return json; // expected { text: string, pin_code: string, ... }
+}
 
 export const extractMailData = async (
   base64Image: string,
-  opts?: { provider?: Provider; model?: string }
+  opts?: { provider?: Provider; model?: string; renderUrl?: string }
 ): Promise<MailData> => {
   const provider = opts?.provider || 'gemini';
   const model = opts?.model;
+  const renderUrl = opts?.renderUrl;
 
   // Clean base64 image data
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
@@ -106,6 +142,33 @@ export const extractMailData = async (
     } catch (e) {
       console.error('[aiService] Failed to parse HF chat response as JSON:', e, json);
       throw new Error('Invalid JSON response from Hugging Face model.');
+    }
+  }
+
+  // Render FastAPI path: accept image POST and return extracted text / pin
+  if (provider === 'render') {
+    try {
+      const json = await scanMailWithRenderFromDataUrl(`data:image/png;base64,${cleanBase64}`, renderUrl);
+      // Map returned JSON into the MailData shape as best-effort
+      const out: any = {
+        recipient: json.recipient || '',
+        address: json.text || json.address || '',
+        pin_code: json.pin_code || json.pin || '',
+        city: json.city || '',
+        state: json.state || '',
+        country: json.country || '',
+        sorting_center_id: json.sorting_center_id || '',
+        sorting_center_name: json.sorting_center_name || '',
+        confidence: typeof json.confidence === 'number' ? Math.round(json.confidence) : 80
+      };
+      return finalize(out);
+    } catch (err: any) {
+      console.error('[aiService] Render scan failed', err);
+      // Surface a clearer error message for CORS/network issues
+      if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('net::ERR'))) {
+        throw new Error('Network or CORS error when calling Render scan endpoint. Check the Render URL and ensure the service allows requests from this origin (Access-Control-Allow-Origin) or use a server-side proxy.');
+      }
+      throw err;
     }
   }
 
