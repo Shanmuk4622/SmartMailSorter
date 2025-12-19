@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { MailData } from './types';
 
 // Helper to normalize a returned JSON blob into MailData
@@ -25,20 +24,8 @@ const finalize = (data: any): MailData => {
 
 export type Provider = 'gemini' | 'huggingface' | 'render';
 
-// Initialize Gemini client if API key present (optional)
-let geminiClient: any = null;
-try {
-  const geminiKey = (process as any)?.env?.GEMINI_API_KEY || (process as any)?.env?.GOOGLE_API_KEY || undefined;
-  if (geminiKey) {
-    try {
-      geminiClient = new GoogleGenAI({ apiKey: geminiKey });
-    } catch (e: any) {
-      console.warn('[aiService] Could not initialize Gemini client', e);
-    }
-  }
-} catch (e: any) {
-  /* ignore */
-}
+// Note: Gemini client is not initialized in the browser. Server-side proxy
+// `/api/gemini` is used for Gemini requests to keep API keys secret.
 
 // Helper: convert data URL to Blob
 const dataURLToBlob = (dataURL: string) => {
@@ -255,18 +242,14 @@ export const extractMailData = async (
           return extractMailData(base64Image, { provider: 'huggingface', model: model, retryAttempt: 1 });
         }
 
-        // Otherwise try Gemini if available
-        if (geminiClient) {
-          console.warn('[aiService] Falling back to Gemini after Render failure');
-          try {
-            if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
-              (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'gemini' } }));
-            }
-          } catch (e: any) {
-            /* ignore */
+        // Otherwise try Gemini (via server-side proxy)
+        try {
+          console.warn('[aiService] Falling back to Gemini proxy after Render failure');
+          if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
+            (window as any).dispatchEvent(new CustomEvent('aiService:fallback', { detail: { from: 'render', to: 'gemini' } }));
           }
-          return extractMailData(base64Image, { provider: 'gemini', model: model, retryAttempt: 1 });
-        }
+        } catch (e: any) { /* ignore */ }
+        return extractMailData(base64Image, { provider: 'gemini', model: model, retryAttempt: 1 });
       }
 
       // If we've already retried or no fallback available, surface a friendly error
@@ -287,23 +270,74 @@ export const extractMailData = async (
   // `/api/gemini` and will call Google GenAI using a server-side key.
   try {
     console.log('[aiService] Routing request to server-side Gemini proxy', model || 'gemini-3-flash-preview');
-    const resp = await fetch('/api/gemini', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: model || 'gemini-3-flash-preview', imageBase64: cleanBase64 })
-    });
-    const text = await resp.text();
+    // Try standard relative serverless path first (works in deployed Vercel).
+    // If that fails (404 or network), fall back to a local dev proxy on port 5174.
+    let resp = null as any;
+    try {
+      resp = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: model || 'gemini-3-flash-preview', imageBase64: cleanBase64 })
+      });
+    } catch (e) {
+      console.warn('[aiService] /api/gemini fetch failed, will attempt local dev proxy', String(e));
+    }
+
+    // If the first attempt returned a non-ok response or didn't run, try localhost dev proxy
+    if (!resp || !resp.ok) {
+      try {
+        const localUrl = (typeof window !== 'undefined' && window.location.hostname === 'localhost') ? 'http://localhost:5174/api/gemini' : 'http://localhost:5174/api/gemini';
+        console.log('[aiService] Trying dev proxy at', localUrl);
+        resp = await fetch(localUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model || 'gemini-3-flash-preview', imageBase64: cleanBase64 })
+        });
+      } catch (e) {
+        console.warn('[aiService] Local dev proxy fetch failed', String(e));
+      }
+    }
+    const text = resp ? await resp.text() : '';
     if (!resp.ok) {
       console.error('[aiService] Gemini proxy error:', resp.status, text);
       throw new Error(`Gemini proxy failed: ${resp.status} ${text}`);
     }
-    let jsonText = text || '{}';
-    if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
-    else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
-    const parsed = JSON.parse(jsonText.trim());
+
+    // The proxy may return a JSON wrapper like { ok, parsed, rawText }
+    // or may return the raw model text directly. Handle both.
+    let parsed: any = null;
+    try {
+      const maybe = JSON.parse(text || '{}');
+      if (maybe && (maybe.parsed || maybe.rawText)) {
+        if (maybe.parsed) parsed = maybe.parsed;
+        else {
+          let jsonText = String(maybe.rawText || '').trim();
+          if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
+          else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
+          parsed = JSON.parse(jsonText || '{}');
+        }
+      } else {
+        // Not a wrapper, assume direct model output (possibly JSON or fenced JSON)
+        let jsonText = String(text || '').trim();
+        if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
+        else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
+        parsed = JSON.parse(jsonText || '{}');
+      }
+    } catch (e: any) {
+      console.error('[aiService] Failed to parse Gemini response', e, 'raw:', text);
+      throw new Error('Gemini proxy returned invalid JSON. See console for raw response.');
+    }
+
     return finalize(parsed);
   } catch (error: any) {
     console.error('[aiService] Gemini extraction (proxy) failed:', error);
+    const msg = String(error?.message || error || 'Unknown error');
+
+    // If the proxy returned 404, provide clear guidance to check deployment
+    if (msg.includes('Gemini proxy failed: 404') || msg.includes('404')) {
+      throw new Error('Gemini proxy returned 404. Ensure /api/gemini is deployed on Vercel and reachable. Check Vercel Function logs for /api/gemini.');
+    }
+
     throw error;
   }
 };

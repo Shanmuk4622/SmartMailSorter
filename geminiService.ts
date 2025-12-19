@@ -1,91 +1,37 @@
-import { GoogleGenAI } from "@google/genai";
 import { MailData } from './types';
 
-// Initialize the client. Prefer Vite-exposed env vars for client builds.
-const GEMINI_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_API_KEY || (import.meta as any).env?.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
-
+// Client-side shim: call the server-side `/api/gemini` proxy instead of
+// initializing `@google/genai` in the browser. This keeps API keys server-side.
 export const extractMailData = async (base64Image: string): Promise<MailData> => {
-  console.log("[GeminiService] Starting extraction process...");
+  console.log('[GeminiService] forwarding image to /api/gemini');
   try {
-    // Strip header if present to get pure base64
-    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-
-    console.log("[GeminiService] Sending request to Gemini-3-Flash-Preview...");
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Capable of multimodal text generation (OCR)
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/png', // Assuming PNG for canvas exports, but API handles others too
-              data: cleanBase64
-            }
-          },
-          {
-            text: `Analyze this image of a mail envelope. Perform Optical Character Recognition (OCR) to extract the recipient and address details. 
-            Based on the extracted PIN/ZIP code and City, classify this mail item into a logical Sorting Center.
-            
-            Return the result purely as a valid JSON object with the following structure. Do not use markdown code blocks.
-            {
-              "recipient": "string",
-              "address": "string",
-              "pin_code": "string",
-              "city": "string",
-              "country": "string",
-              "sorting_center_id": "string",
-              "sorting_center_name": "string",
-              "confidence": number
-            }
-            
-            IMPORTANT: Return "confidence" as an integer between 0 and 100 (e.g., 95, not 0.95).`
-          }
-        ]
-      },
-      config: {
-        temperature: 0.1, // Lower temperature for more deterministic output
-      }
+    const resp = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gemini-3-flash-preview', imageBase64: base64Image })
     });
 
-    console.log("[GeminiService] Response received.");
-    let jsonText = response.text || "{}";
-    console.debug("[GeminiService] Raw text response:", jsonText);
-    
-    // Clean up potential markdown formatting if the model includes it
-    if (jsonText.includes("```json")) {
-      jsonText = jsonText.replace(/```json/g, "").replace(/```/g, "");
-    } else if (jsonText.includes("```")) {
-      jsonText = jsonText.replace(/```/g, "");
+    const body = await resp.json();
+    if (!resp.ok) {
+      console.error('[GeminiService] server error', body);
+      throw new Error(body?.error || 'Server-side Gemini proxy error');
     }
 
-    try {
-      const data = JSON.parse(jsonText.trim()) as MailData;
-      
-      // Normalization Logic: Ensure confidence is 0-100 Integer
+    if (body?.ok && body.parsed) {
+      const data = body.parsed as MailData;
+      // Ensure confidence normalization
       if (typeof data.confidence === 'number') {
-        if (data.confidence <= 1 && data.confidence > 0) {
-          // It sent a float (e.g. 0.95), convert to percentage
-          data.confidence = Math.round(data.confidence * 100);
-        } else {
-          // It sent an integer or >1, just round it
-          data.confidence = Math.round(data.confidence);
-        }
+        if (data.confidence > 0 && data.confidence <= 1) data.confidence = Math.round(data.confidence * 100);
+        else data.confidence = Math.round(data.confidence);
       } else {
-        // Fallback if missing
         data.confidence = 0;
       }
-
-      console.log("[GeminiService] JSON parsed and normalized:", data);
       return data;
-    } catch (parseError) {
-      console.error("[GeminiService] JSON Parse Error:", parseError);
-      console.error("[GeminiService] Failed JSON content:", jsonText);
-      throw new Error("Invalid JSON response from AI model. Please retake the photo.");
     }
 
-  } catch (error: any) {
-    console.error("[GeminiService] Critical Extraction Error:", error);
-    // Rethrow specific errors if possible, or pass the original error up
-    throw error;
+    throw new Error(body?.error || 'Unexpected response from Gemini proxy');
+  } catch (err: any) {
+    console.error('[GeminiService] extraction failed', err);
+    throw err;
   }
 };

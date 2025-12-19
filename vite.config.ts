@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
+import { GoogleGenAI } from '@google/genai';
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
@@ -81,6 +82,53 @@ export default defineConfig(({ mode }) => {
 					} catch (err) {
 						console.error('[vite:scan-proxy] proxy error', err);
 						try { res.statusCode = 502; res.end('Scan proxy error'); } catch (e) {}
+					}
+				});
+
+				// Dev-only Gemini proxy: call Google GenAI locally using GOOGLE_API_KEY
+				server.middlewares.use('/api/gemini', async (req: any, res: any) => {
+					try {
+						const key = env.GOOGLE_API_KEY || env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+						if (!key) return res.statusCode = 500, res.end(JSON.stringify({ error: 'Missing GOOGLE_API_KEY in dev env' }));
+						const chunks: Uint8Array[] = [];
+						for await (const chunk of req) chunks.push(chunk);
+						const raw = chunks.length ? Buffer.concat(chunks).toString() : '';
+						let body = {};
+						try { body = raw ? JSON.parse(raw) : {}; } catch (e) { /* ignore */ }
+						const { model, imageBase64, prompt } = body as any;
+						if (!model) return res.statusCode = 400, res.end(JSON.stringify({ error: 'Missing model in request body' }));
+						const ai = new GoogleGenAI({ apiKey: key });
+						const parts: any[] = [];
+						if (imageBase64) {
+							const cleanBase64 = String(imageBase64).replace(/^data:image\/(png|jpg|jpeg);base64,/, '');
+							parts.push({ inlineData: { mimeType: 'image/png', data: cleanBase64 } });
+						}
+						const defaultPrompt = `Analyze this image of a mail envelope. Perform Optical Character Recognition (OCR) to extract the recipient and address details. Based on the extracted PIN/ZIP code and City, classify this mail item into a logical Sorting Center. Return the result purely as a valid JSON object with the following structure. Do not use markdown code blocks. { "recipient": "string", "address": "string", "pin_code": "string", "city": "string", "country": "string", "sorting_center_id": "string", "sorting_center_name": "string", "confidence": number } IMPORTANT: Return "confidence" as an integer between 0 and 100 (e.g., 95, not 0.95).`;
+						parts.push({ text: prompt || defaultPrompt });
+						const response: any = await ai.models.generateContent({ model, contents: { parts }, config: { temperature: 0.1 } });
+						let text: string = response?.text || '';
+						if (!text) {
+							const out = response?.output || response?.outputs || [];
+							if (Array.isArray(out) && out.length > 0) {
+								const first = out[0];
+								if (first?.content && Array.isArray(first.content)) text = first.content.map((c: any) => c.text || c).join('\n');
+							}
+						}
+						res.setHeader('Content-Type', 'application/json');
+						res.setHeader('Access-Control-Allow-Origin', '*');
+						if (!text) return res.statusCode = 502, res.end(JSON.stringify({ error: 'Empty response from model', raw: response }));
+						let jsonText = String(text || '').trim();
+						if (jsonText.includes('```json')) jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
+						else if (jsonText.includes('```')) jsonText = jsonText.replace(/```/g, '');
+						try {
+							const parsed = JSON.parse(jsonText);
+							return res.end(JSON.stringify({ ok: true, parsed, rawText: jsonText }));
+						} catch (parseErr) {
+							return res.statusCode = 502, res.end(JSON.stringify({ error: 'Model returned non-JSON or malformed JSON', rawText: jsonText }));
+						}
+					} catch (err) {
+						console.error('[vite:gemini-proxy] error', err);
+						try { res.statusCode = 500; res.end(JSON.stringify({ error: 'Gemini proxy error' })); } catch (e) {}
 					}
 				});
 		}
