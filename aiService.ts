@@ -61,8 +61,15 @@ export async function scanMailWithRenderFromDataUrl(dataUrl: string, renderUrl?:
   const formData = new FormData();
   formData.append('file', file);
 
+  const headers: Record<string, string> = {
+    // Required by ngrok to bypass the browser warning interstitial for programmatic requests
+    'ngrok-skip-browser-warning': '69420'
+  };
+
   const res = await fetch(RENDER_SCAN_URL, {
     method: 'POST',
+    // Do not set Content-Type (browser will set multipart boundary automatically)
+    headers,
     body: formData
   });
   if (!res.ok) {
