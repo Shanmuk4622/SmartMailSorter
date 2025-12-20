@@ -342,16 +342,16 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
       {/* Left Column: Input */}
       <div className="flex flex-col gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex-1 flex flex-col hover:shadow-lg transition-all duration-500 relative overflow-hidden group">
-          {/* Subtle tech grid background */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+        <div className="bg-white/90 p-6 rounded-3xl shadow-lg border border-orange-200 flex-1 flex flex-col hover:shadow-xl transition-all duration-500 relative overflow-hidden group">
+          {/* Subtle Indian flag themed background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#FF6600]/5 via-[#138808]/5 to-[#000080]/5 pointer-events-none"></div>
 
           <div className="flex items-center justify-between mb-6 relative z-10">
              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
+              <div className="bg-[#FF6600] p-2 rounded-lg text-white shadow-lg shadow-orange-200">
                 <ImageIcon className="w-5 h-5" />
               </div>
-              Visual Input Stream
+              छवि इनपुट | Visual Input Stream
             </h2>
             {image && (
                <button 
