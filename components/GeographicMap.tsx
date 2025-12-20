@@ -84,15 +84,15 @@ const FitBounds: React.FC<{ centers: MapCenter[] }> = ({ centers }) => {
 const GeographicMap: React.FC<GeographicMapProps> = ({ centers }) => {
   console.log('🗺️ GeographicMap rendering with', centers.length, 'centers:', centers);
   
-  // Fallback sample centers if no real data
+  // Fallback sample centers if no real data - Indian Postal Hubs
   const fallbackCenters: MapCenter[] = [
     {
       id: 'fallback-1',
-      name: 'NYC Hub',
-      city: 'New York', 
-      state: 'NY',
-      lat: 40.7128,
-      lng: -74.0060,
+      name: 'Mumbai Hub',
+      city: 'Mumbai', 
+      state: 'Maharashtra',
+      lat: 19.0760,
+      lng: 72.8777,
       scanCount: 25,
       lastActivity: Date.now(),
       status: 'active',
@@ -100,11 +100,11 @@ const GeographicMap: React.FC<GeographicMapProps> = ({ centers }) => {
     },
     {
       id: 'fallback-2',
-      name: 'LA Hub',
-      city: 'Los Angeles',
-      state: 'CA', 
-      lat: 34.0522,
-      lng: -118.2437,
+      name: 'Delhi Hub',
+      city: 'New Delhi',
+      state: 'Delhi', 
+      lat: 28.6139,
+      lng: 77.2090,
       scanCount: 18,
       lastActivity: Date.now() - 3600000,
       status: 'busy',
@@ -112,24 +112,48 @@ const GeographicMap: React.FC<GeographicMapProps> = ({ centers }) => {
     },
     {
       id: 'fallback-3',
-      name: 'Chicago Hub',
-      city: 'Chicago',
-      state: 'IL',
-      lat: 41.8781,
-      lng: -87.6298,
+      name: 'Bangalore Hub',
+      city: 'Bangalore',
+      state: 'Karnataka',
+      lat: 12.9716,
+      lng: 77.5946,
       scanCount: 12,
       lastActivity: Date.now() - 7200000,
       status: 'idle',
       traffic: 30
+    },
+    {
+      id: 'fallback-4',
+      name: 'Chennai Hub',
+      city: 'Chennai',
+      state: 'Tamil Nadu',
+      lat: 13.0827,
+      lng: 80.2707,
+      scanCount: 15,
+      lastActivity: Date.now() - 1800000,
+      status: 'active',
+      traffic: 55
+    },
+    {
+      id: 'fallback-5',
+      name: 'Kolkata Hub',
+      city: 'Kolkata',
+      state: 'West Bengal',
+      lat: 22.5726,
+      lng: 88.3639,
+      scanCount: 20,
+      lastActivity: Date.now() - 900000,
+      status: 'active',
+      traffic: 65
     }
   ];
   
   const displayCenters = centers.length > 0 ? centers : fallbackCenters;
   console.log('🗺️ Using centers for map:', displayCenters);
   
-  // Center of US for initial view
-  const defaultCenter: [number, number] = [39.8283, -98.5795];
-  const defaultZoom = 4;
+  // Center of India for initial view
+  const defaultCenter: [number, number] = [20.5937, 78.9629]; // Center of India
+  const defaultZoom = 5;
 
   return (
     <div className="h-full w-full rounded-lg overflow-hidden">

@@ -7,6 +7,10 @@ import { sampleData, sortingCenterLocations } from '../sampleData';
 import { ScanResult } from '../types';
 import GeographicMap from './GeographicMap';
 
+interface MapVizProps {
+  scanHistory?: ScanResult[];
+}
+
 interface MapNode {
   id: string;
   x: number; // 0-100 relative coordinate or actual longitude
@@ -20,7 +24,7 @@ interface MapNode {
   lastActivity?: number;
 }
 
-const MapViz: React.FC = () => {
+const MapViz: React.FC<MapVizProps> = ({ scanHistory = [] }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -40,6 +44,13 @@ const MapViz: React.FC = () => {
   const [scanData, setScanData] = useState<ScanResult[]>([]);
   const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
   const [mapView, setMapView] = useState<'abstract' | 'geographic'>('geographic'); // Default to geographic
+  
+  // Update scan data when scanHistory prop changes
+  useEffect(() => {
+    console.log('🗺️  MapViz received', scanHistory.length, 'scans from props');
+    setScanData(scanHistory);
+    setLastUpdate(Date.now());
+  }, [scanHistory]);
   
   // Fetch and process real data
   const fetchMapData = async () => {

@@ -1,17 +1,17 @@
 // Sample data to populate visualizations for demonstration
 import { ScanResult, MailData } from './types';
 
-// Generate realistic mail scan data
+// Generate realistic mail scan data for Indian postal system
 const generateSampleScans = (): ScanResult[] => {
   const sortingCenters = [
-    { id: 'NYC-001', name: 'New York Central', city: 'New York', state: 'NY', lat: 40.7128, lng: -74.0060 },
-    { id: 'CHI-002', name: 'Chicago Hub', city: 'Chicago', state: 'IL', lat: 41.8781, lng: -87.6298 },
-    { id: 'LAX-003', name: 'Los Angeles West', city: 'Los Angeles', state: 'CA', lat: 34.0522, lng: -118.2437 },
-    { id: 'MIA-004', name: 'Miami Southeast', city: 'Miami', state: 'FL', lat: 25.7617, lng: -80.1918 },
-    { id: 'SEA-005', name: 'Seattle Northwest', city: 'Seattle', state: 'WA', lat: 47.6062, lng: -122.3321 },
-    { id: 'ATL-006', name: 'Atlanta Central', city: 'Atlanta', state: 'GA', lat: 33.7490, lng: -84.3880 },
-    { id: 'DEN-007', name: 'Denver Mountain', city: 'Denver', state: 'CO', lat: 39.7392, lng: -104.9903 },
-    { id: 'BOS-008', name: 'Boston Northeast', city: 'Boston', state: 'MA', lat: 42.3601, lng: -71.0589 }
+    { id: 'MUM-001', name: 'Mumbai Central', city: 'Mumbai', state: 'Maharashtra', lat: 19.0760, lng: 72.8777 },
+    { id: 'DEL-002', name: 'Delhi GPO', city: 'New Delhi', state: 'Delhi', lat: 28.6139, lng: 77.2090 },
+    { id: 'BLR-003', name: 'Bangalore South', city: 'Bangalore', state: 'Karnataka', lat: 12.9716, lng: 77.5946 },
+    { id: 'CHE-004', name: 'Chennai Central', city: 'Chennai', state: 'Tamil Nadu', lat: 13.0827, lng: 80.2707 },
+    { id: 'KOL-005', name: 'Kolkata GPO', city: 'Kolkata', state: 'West Bengal', lat: 22.5726, lng: 88.3639 },
+    { id: 'HYD-006', name: 'Hyderabad Secunderabad', city: 'Hyderabad', state: 'Telangana', lat: 17.3850, lng: 78.4867 },
+    { id: 'PUN-007', name: 'Pune Maharashtra', city: 'Pune', state: 'Maharashtra', lat: 18.5204, lng: 73.8567 },
+    { id: 'AHM-008', name: 'Ahmedabad Gujarat', city: 'Ahmedabad', state: 'Gujarat', lat: 23.0225, lng: 72.5714 }
   ];
 
   const scans: ScanResult[] = [];
@@ -28,11 +28,11 @@ const generateSampleScans = (): ScanResult[] => {
     
     const mailData: MailData | null = isSuccess ? {
       recipient: `Recipient ${i + 1}`,
-      address: `${Math.floor(Math.random() * 9999) + 1} Main St`,
-      pin_code: `${Math.floor(Math.random() * 90000) + 10000}`,
+      address: `${Math.floor(Math.random() * 999) + 1}/${Math.floor(Math.random() * 99) + 1}, ${['Main Road', 'Gandhi Street', 'MG Road', 'Station Road', 'Market Street'][Math.floor(Math.random() * 5)]}`,
+      pin_code: `${Math.floor(Math.random() * 900000) + 100000}`, // Indian 6-digit PIN format
       city: center.city,
       state: center.state,
-      country: 'USA',
+      country: 'India',
       sorting_center_id: center.id,
       sorting_center_name: center.name,
       confidence: 0.75 + Math.random() * 0.25

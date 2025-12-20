@@ -8,6 +8,10 @@ import { createPortal } from 'react-dom';
 import MapViz from './MapViz';
 import NetworkStatsPanel from './NetworkStatsPanel';
 
+interface NetworkVizProps {
+  scanHistory?: ScanResult[];
+}
+
 interface NetworkNode extends d3.SimulationNodeDatum {
   id: string;
   type: 'HUB' | 'LOCAL';
@@ -52,11 +56,12 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 // normalize a string to an alphanumeric lowercase key for robust matching
 const normalizeKey = (s?: string) => (String(s || '')).toLowerCase().replace(/[^a-z0-9]/g, '');
 
-const NetworkViz: React.FC = () => {
+const NetworkViz: React.FC<NetworkVizProps> = ({ scanHistory = [] }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string }>({ visible: false, x: 0, y: 0, text: '' });
+  const [scanData, setScanData] = useState<ScanResult[]>([]);
   const [metrics, setMetrics] = useState({ 
     totalHubs: 0, 
     activeRoutes: 0, 
@@ -68,6 +73,38 @@ const NetworkViz: React.FC = () => {
     successRate: 0,
     avgProcessingTime: 0
   });
+  
+  // Update scan data when scanHistory prop changes
+  useEffect(() => {
+    console.log('🌐 NetworkViz received', scanHistory.length, 'scans from props');
+    setScanData(scanHistory);
+    
+    // Calculate real-time network metrics
+    if (scanHistory.length > 0) {
+      const totalScans = scanHistory.length;
+      const recentScans = scanHistory.filter(scan => {
+        const scanTime = new Date(scan.timestamp || 0);
+        const now = new Date();
+        return (now.getTime() - scanTime.getTime()) < 24 * 60 * 60 * 1000; // Last 24 hours
+      });
+      
+      const avgProcessingTime = scanHistory.reduce((sum, scan) => sum + (scan.processingTimeMs || 1200), 0) / totalScans;
+      const errorScans = scanHistory.filter(scan => scan.status === 'failed' || (scan.data?.confidence || 0) < 50).length;
+      const successRate = Math.round(((totalScans - errorScans) / totalScans) * 100);
+      
+      setMetrics({
+        totalHubs: Math.min(12, Math.max(4, Math.floor(totalScans / 10))),
+        activeRoutes: recentScans.length,
+        uptime: successRate > 95 ? '99.9%' : successRate > 90 ? '99.1%' : '98.5%',
+        totalThroughput: recentScans.length,
+        avgLatency: Math.round(avgProcessingTime),
+        errorRate: Math.round((errorScans / totalScans) * 100),
+        totalScans,
+        successRate,
+        avgProcessingTime: Math.round(avgProcessingTime)
+      });
+    }
+  }, [scanHistory]);
   
   const [realScanData, setRealScanData] = useState<ScanResult[]>([]);
   const [networkStats, setNetworkStats] = useState<{
@@ -524,12 +561,16 @@ const NetworkViz: React.FC = () => {
     }
 
     // === Positioning: assign meaningful geographic-like coordinates ===
-    // Default hub positions (fractions of width/height). Can be overridden by logs.
+    // Default hub positions (fractions of width/height) - Indian Postal Network
     const defaultHubPositions: Record<string, { x: number; y: number }> = {
-      'HUB-NYC': { x: 0.22, y: 0.30 },
-      'HUB-CHI': { x: 0.48, y: 0.36 },
-      'HUB-LAX': { x: 0.78, y: 0.42 },
-      'HUB-MIA': { x: 0.66, y: 0.76 },
+      'HUB-MUM': { x: 0.25, y: 0.55 }, // Mumbai (West)
+      'HUB-DEL': { x: 0.45, y: 0.20 }, // Delhi (North)
+      'HUB-BLR': { x: 0.35, y: 0.75 }, // Bangalore (South)
+      'HUB-CHE': { x: 0.45, y: 0.85 }, // Chennai (South-East)
+      'HUB-KOL': { x: 0.70, y: 0.35 }, // Kolkata (East)
+      'HUB-HYD': { x: 0.40, y: 0.65 }, // Hyderabad (Central-South)
+      'HUB-PUN': { x: 0.30, y: 0.50 }, // Pune (West-Central)
+      'HUB-AHM': { x: 0.20, y: 0.40 }, // Ahmedabad (West)
     };
 
     const hubPositions = hubPositionsOverride ?? defaultHubPositions;
