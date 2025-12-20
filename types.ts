@@ -26,7 +26,9 @@ export enum AppView {
   SCANNER = 'SCANNER',
   HISTORY = 'HISTORY',
   NETWORK = 'NETWORK',
-  ANALYTICS = 'ANALYTICS'
+  ANALYTICS = 'ANALYTICS',
+  BULK = 'BULK',
+  ADVANCED_ANALYTICS = 'ADVANCED_ANALYTICS'
 }
 
 export interface ProcessingOptions {

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User, BarChart3, FileText, TrendingUp } from 'lucide-react';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
 import NetworkViz from './components/NetworkViz';
 import Analytics from './components/Analytics';
+import NotificationCenter from './components/NotificationCenter';
+import BulkProcessor from './components/BulkProcessor';
+import AdvancedAnalytics from './components/AdvancedAnalytics';
+import UserProfile from './components/UserProfile';
 import { AppView, ScanResult } from './types';
 import { supabase } from './supabaseClient';
 import './testMapData'; // Import test data utilities
@@ -56,13 +60,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 flex font-sans">
+    <div className="min-h-screen bg-slate-50 flex font-sans">
       {/* Sidebar - India Post Theme */}
-      <aside className={`fixed inset-y-0 left-0 z-50 ${isCompactSidebar ? 'w-20' : 'w-72'} bg-gradient-to-b from-[#FF6600] via-[#138808] to-[#000080] text-white transform transition-all duration-300 ease-in-out md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 ${isCompactSidebar ? 'w-20' : 'w-72'} bg-slate-800 text-white transform transition-all duration-300 ease-in-out md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 flex items-center gap-4 border-b border-white/20">
           <div className="relative group">
              <div className="absolute inset-0 bg-white rounded-xl blur opacity-40 group-hover:opacity-60 transition-opacity"></div>
-             <div className="relative bg-gradient-to-br from-orange-500 to-red-600 p-2.5 rounded-xl shadow-lg border-2 border-white/30">
+             <div className="relative bg-orange-500 p-2.5 rounded-xl shadow-lg border-2 border-white/30">
                <Mail className="w-6 h-6 text-white" />
              </div>
           </div>
@@ -126,12 +130,30 @@ const App: React.FC = () => {
             compact={isCompactSidebar}
           />
           <NavButton 
+            active={currentView === AppView.BULK} 
+            onClick={() => { setCurrentView(AppView.BULK); setIsMobileMenuOpen(false); }} 
+            icon={<FileText className="w-5 h-5" />}
+            label="बल्क | Bulk Process"
+            description="Multiple Scans"
+            color="bg-indigo-600"
+            compact={isCompactSidebar}
+          />
+          <NavButton 
             active={currentView === AppView.ANALYTICS} 
             onClick={() => { setCurrentView(AppView.ANALYTICS); setIsMobileMenuOpen(false); }} 
             icon={<BarChart3 className="w-5 h-5" />}
             label="विश्लेषण | Analytics"
             description="Data & Reports"
             color="bg-purple-600"
+            compact={isCompactSidebar}
+          />
+          <NavButton 
+            active={currentView === AppView.ADVANCED_ANALYTICS} 
+            onClick={() => { setCurrentView(AppView.ADVANCED_ANALYTICS); setIsMobileMenuOpen(false); }} 
+            icon={<TrendingUp className="w-5 h-5" />}
+            label="उन्नत विश्लेषण | Advanced"
+            description="Deep Insights"
+            color="bg-emerald-600"
             compact={isCompactSidebar}
           />
         </nav>
@@ -161,7 +183,7 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-orange-50">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
         {/* Header - India Post Theme */}
         <header className="bg-white/90 backdrop-blur-md border-b border-orange-200 sticky top-0 z-30 shadow-sm">
           <div className="max-w-7xl mx-0 px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
@@ -185,6 +207,8 @@ const App: React.FC = () => {
                     {currentView === AppView.SCANNER && 'Mail Processing | डाक प्रसंस्करण'}
                     {currentView === AppView.HISTORY && 'Scan History | स्कैन इतिहास'}
                     {currentView === AppView.ANALYTICS && 'Data Analytics | डेटा विश्लेषण'}
+                    {currentView === AppView.BULK && 'Bulk Processing | बल्क प्रोसेसिंग'}
+                    {currentView === AppView.ADVANCED_ANALYTICS && 'Advanced Analytics | उन्नत विश्लेषण'}
                   </h2>
                 </div>
               </div>
@@ -195,13 +219,8 @@ const App: React.FC = () => {
                 <span className="text-sm font-semibold text-slate-700">{new Date().toLocaleDateString('hi-IN', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
                 <span className="text-xs text-orange-600">भारतीय डाक विभाग</span>
               </div>
-              <button aria-label="Notifications" title="Notifications" className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-              </button>
-              <div className="h-10 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center text-white font-bold">
-                <User className="w-5 h-5" />
-              </div>
+              <NotificationCenter onNewScan={(data) => console.log('New scan notification:', data)} />
+              <UserProfile onAction={(action) => console.log('User action:', action)} />
             </div>
           </div>
         </header>
@@ -215,6 +234,11 @@ const App: React.FC = () => {
               {currentView === AppView.SCANNER && <Scanner onScanComplete={handleScanComplete} />}
               {currentView === AppView.HISTORY && <HistoryLog history={history} />}
               {currentView === AppView.ANALYTICS && <Analytics />}
+              {currentView === AppView.BULK && <BulkProcessor onBulkProcess={(results) => {
+                const newScans = results.map(result => ({ ...result, timestamp: new Date().getTime() }));
+                setHistory(prev => [...newScans, ...prev]);
+              }} />}
+              {currentView === AppView.ADVANCED_ANALYTICS && <AdvancedAnalytics scanHistory={history} />}
             </div>
           </div>
         </div>
