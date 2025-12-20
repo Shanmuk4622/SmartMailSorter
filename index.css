@@ -4,19 +4,19 @@
 @tailwind utilities;
 
 :root {
-  --primary: #FF6600; /* India Flag Saffron */
-  --primary-dark: #138808; /* India Flag Green */
-  --secondary: #000080; /* India Flag Navy Blue */
-  --accent: #FF6600; /* Government Orange */
-  --india-saffron: #FF9933;
+  --primary: #DC2626; /* Clean red */
+  --primary-dark: #16A34A; /* Clean green */
+  --secondary: #1D4ED8; /* Clean blue */
+  --accent: #EA580C; /* Warm orange */
+  --india-saffron: #F59E0B;
   --india-white: #FFFFFF;
-  --india-green: #138808;
-  --india-navy: #000080;
+  --india-green: #22C55E;
+  --india-navy: #3B82F6;
 }
 
 body {
   font-family: 'Inter', sans-serif;
-  @apply bg-orange-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-slate-900 antialiased;
 }
 
 /* Scrollbar */
