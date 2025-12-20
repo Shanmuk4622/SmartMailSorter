@@ -1023,44 +1023,7 @@ const NetworkViz: React.FC = () => {
              </div>
            )}
            
-           {/* Testing Panel - Bottom-right */}
-           <div className="absolute bottom-4 right-4 z-20">
-             <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-2xl p-4 border border-purple-500/30 backdrop-blur-sm w-64">
-               <div className="flex items-center gap-3 mb-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-purple-400">
-                   <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5h0c-1.4 0-2.5-1.1-2.5-2.5V2"></path>
-                   <path d="M8.5 2h7"></path>
-                   <path d="M14.5 16h-5"></path>
-                 </svg>
-                 <h4 className="text-sm font-semibold text-white">Real-time Testing</h4>
-               </div>
-               <div className="flex flex-col gap-2">
-                 <button 
-                   onClick={() => (window as any).importCSVData?.()}
-                   className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-medium w-full"
-                 >
-                   <Database className="w-3 h-3" />
-                   Load Sample Data
-                 </button>
-                 <button 
-                   onClick={() => {
-                     // Simulate a new scan
-                     window.dispatchEvent(new CustomEvent('testScanAdded', {
-                       detail: { center: 'TEST-' + Date.now(), scans: Math.floor(Math.random() * 50) + 1 }
-                     }));
-                     fetchRealNetworkData();
-                   }}
-                   className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-xs font-medium w-full"
-                 >
-                   <Activity className="w-3 h-3" />
-                   Add Test Scan
-                 </button>
-               </div>
-               <p className="text-slate-400 text-xs mt-2">Test real-time updates and data visualization</p>
-             </div>
-           </div>
-
-           {/* Network Stats Panel - Moved to bottom-left */}
+           {/* Network Stats Panel - Bottom-left */}
            <div className="absolute bottom-4 left-4 z-20">
              <NetworkStatsPanel 
                metrics={metrics}
@@ -1069,8 +1032,8 @@ const NetworkViz: React.FC = () => {
              />
            </div>
            
-           {/* Enhanced Legend */}
-           <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-700 space-y-2">
+           {/* Enhanced Legend - Bottom-right */}
+           <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-700 space-y-2 z-20">
              <div className="text-xs font-bold text-slate-300 mb-2">NODE STATUS</div>
              <div className="flex items-center gap-2 text-xs text-slate-300">
                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span> Active
@@ -1255,6 +1218,43 @@ const NetworkViz: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Testing Panel - Bottom of container */}
+      <div className="mt-4">
+        <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-2xl p-4 border border-purple-500/30 backdrop-blur-sm max-w-md mx-auto">
+          <div className="flex items-center gap-3 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-purple-400">
+              <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5h0c-1.4 0-2.5-1.1-2.5-2.5V2"></path>
+              <path d="M8.5 2h7"></path>
+              <path d="M14.5 16h-5"></path>
+            </svg>
+            <h4 className="text-sm font-semibold text-white">Real-time Testing</h4>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center justify-center">
+            <button 
+              onClick={() => (window as any).importCSVData?.()}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Database className="w-4 h-4" />
+              Load Sample Data
+            </button>
+            <button 
+              onClick={() => {
+                // Simulate a new scan
+                window.dispatchEvent(new CustomEvent('testScanAdded', {
+                  detail: { center: 'TEST-' + Date.now(), scans: Math.floor(Math.random() * 50) + 1 }
+                }));
+                fetchRealNetworkData();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Activity className="w-4 h-4" />
+              Add Test Scan
+            </button>
+          </div>
+          <p className="text-slate-400 text-sm mt-3 text-center">Use these buttons to test real-time data updates in NetworkViz and MapViz. Watch the visualizations update automatically!</p>
         </div>
       </div>
     </div>
