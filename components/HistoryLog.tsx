@@ -94,18 +94,18 @@ const HistoryLog: React.FC<HistoryLogProps> = ({ history }) => {
   const hasFilters = searchQuery || startDate || endDate;
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full hover:shadow-lg transition-all duration-300 animate-fade-in">
+    <div className="bg-white/90 rounded-3xl shadow-lg border border-orange-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300 animate-fade-in">
       {/* Header and Controls */}
-      <div className="px-8 py-8 border-b border-slate-100 flex flex-col gap-6 bg-slate-50/50">
+      <div className="px-8 py-8 border-b border-orange-100 flex flex-col gap-6 bg-gradient-to-r from-[#FF6600]/5 via-[#138808]/5 to-[#000080]/5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-             <div className="p-3 bg-amber-500 rounded-2xl text-white shadow-lg shadow-amber-200">
+             <div className="p-3 bg-[#FF6600] rounded-2xl text-white shadow-lg shadow-orange-200">
                <FileText className="w-5 h-5" />
              </div>
              <div>
-               <h3 className="text-xl font-bold text-slate-800">Scan Logs</h3>
-               <p className="text-sm text-slate-500 font-medium">
-                 {filteredHistory.length} <span className="text-slate-400">entries</span>
+               <h3 className="text-xl font-bold text-slate-800">स्कैन लॉग | Scan Logs</h3>
+               <p className="text-sm text-slate-600 font-medium">
+                 {filteredHistory.length} <span className="text-slate-400">रिकॉर्ड | entries</span>
                </p>
              </div>
           </div>
@@ -114,10 +114,10 @@ const HistoryLog: React.FC<HistoryLogProps> = ({ history }) => {
             <button
               onClick={handleExportCSV}
               disabled={sortedHistory.length === 0}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#138808] hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-green-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export CSV</span>
+              <span className="hidden sm:inline">निर्यात | Export CSV</span>
             </button>
 
             <button

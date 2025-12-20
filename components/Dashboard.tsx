@@ -73,12 +73,12 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Top Stats Cards with Glassmorphism feel */}
+      {/* Top Stats Cards - India Post Theme */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           icon={<Package className="w-5 h-5 text-white" />} 
           color="blue"
-          label="Total Scanned" 
+          label="कुल स्कैन | Total Processed" 
           value={totalScans.toString()} 
           trend="+12%"
           trendUp={true}
@@ -86,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
         <StatCard 
           icon={<Activity className="w-5 h-5 text-white" />} 
           color="emerald"
-          label="Avg Accuracy" 
+          label="सटीकता | Accuracy Rate" 
           value={`${avgConfidence}%`} 
           trend={isPositiveTrend ? "+2.4%" : "-1.1%"}
           trendUp={isPositiveTrend}
@@ -94,32 +94,32 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
         <StatCard 
           icon={<MapPin className="w-5 h-5 text-white" />} 
           color="indigo"
-          label="Active Centers" 
+          label="सक्रिय केंद्र | Active Centers" 
           value="14" 
-          subtext="Operational"
+          subtext="भारत भर में | Across India"
         />
         <StatCard 
           icon={<AlertCircle className="w-5 h-5 text-white" />} 
           color="amber"
-          label="Flagged Items" 
+          label="समीक्षा | Review Required" 
           value={history.filter(h => (h.data?.confidence || 100) < 70).length.toString()} 
-          subtext="Requires Review"
+          subtext="Manual Check Needed"
           alert={true}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300">
+        <div className="lg:col-span-2 bg-white/90 p-8 rounded-3xl shadow-lg border border-orange-200 hover:shadow-xl transition-all duration-300">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-blue-500" />
-                Performance Metrics
+                <BarChart3 className="w-5 h-5 text-orange-600" />
+                प्रदर्शन मेट्रिक्स | Performance Metrics
               </h3>
-              <p className="text-sm text-slate-500 mt-1">OCR confidence trends over time</p>
+              <p className="text-sm text-slate-600 mt-1">OCR confidence trends over time</p>
             </div>
-            <select className="text-sm border-slate-200 rounded-xl px-4 py-2 text-slate-600 focus:ring-blue-500 bg-slate-50 font-medium cursor-pointer hover:bg-slate-100 transition-colors">
+            <select className="text-sm border-orange-200 rounded-xl px-4 py-2 text-slate-600 focus:ring-orange-500 bg-orange-50 font-medium cursor-pointer hover:bg-orange-100 transition-colors">
               <option>Last 24 Hours</option>
               <option>Last 7 Days</option>
             </select>
@@ -129,8 +129,9 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorConfidence" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#FF6600" stopOpacity={0.3}/>
+                    <stop offset="50%" stopColor="#138808" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#000080" stopOpacity={0.1}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -144,7 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
                 <Area 
                   type="monotone" 
                   dataKey="confidence" 
-                  stroke="#3b82f6" 
+                  stroke="#FF6600" 
                   strokeWidth={3} 
                   fillOpacity={1} 
                   fill="url(#colorConfidence)" 
@@ -154,19 +155,19 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
           </div>
         </div>
 
-        {/* Map Visualization */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300 flex flex-col">
+        {/* Live Map */}
+        <div className="bg-white/90 p-6 rounded-3xl shadow-lg border border-orange-200 hover:shadow-xl transition-all duration-300 flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <div>
-               <h3 className="text-xl font-bold text-slate-800">Live Map</h3>
-               <p className="text-sm text-slate-500">Regional Distribution</p>
+               <h3 className="text-xl font-bold text-slate-800">लाइव मैप | Live Map</h3>
+               <p className="text-sm text-slate-600">Regional Distribution</p>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 shadow-sm">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              <span className="text-xs text-emerald-700 font-bold uppercase tracking-wide">Online</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 shadow-sm">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span className="text-xs text-green-700 font-bold uppercase tracking-wide">ऑनलाइन | Online</span>
             </div>
           </div>
-          <div className="flex-1 min-h-[300px] relative rounded-2xl overflow-hidden border border-slate-100 shadow-inner">
+          <div className="flex-1 min-h-[300px] relative rounded-2xl overflow-hidden border border-orange-100 shadow-inner">
             <MapViz />
           </div>
         </div>

@@ -964,34 +964,34 @@ const NetworkViz: React.FC = () => {
            
            <div className="absolute top-4 left-4 z-10">
              <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-               <Database className="w-5 h-5 text-cyan-400" />
-               MAIL PROCESSING NETWORK
+               <Database className="w-5 h-5 text-[#FF6600]" />
+               भारतीय डाक नेटवर्क | MAIL PROCESSING NETWORK
              </h3>
-             <p className="text-slate-400 text-xs font-mono mt-1">LIVE_DATA /// {networkStats.sortingCenters.filter(n => n.scanCount > 0).length}/{networkStats.sortingCenters.length} CENTERS_ACTIVE</p>
+             <p className="text-slate-400 text-xs font-mono mt-1">लाइव डेटा | LIVE_DATA /// {networkStats.sortingCenters.filter(n => n.scanCount > 0).length}/{networkStats.sortingCenters.length} केंद्र सक्रिय | CENTERS_ACTIVE</p>
              
              <div className="flex gap-2 mt-3 pointer-events-auto">
                <button
                  onClick={() => setViewMode('network')}
                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                   viewMode === 'network' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                   viewMode === 'network' ? 'bg-[#FF6600] text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                  }`}
                >
-                 Network View
+                 नेटवर्क दृश्य | Network
                </button>
                <button
                  onClick={() => setViewMode('map')}
                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                   viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                   viewMode === 'map' ? 'bg-[#FF6600] text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                  }`}
                >
-                 Map View
+                 मानचित्र | Map
                </button>
                <button
                  onClick={() => (window as any).importCSVData?.()}
-                 className="px-3 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                 className="px-3 py-1 rounded text-xs font-medium bg-[#138808] text-white hover:bg-green-700 transition-colors"
                  title="Import sample CSV data"
                >
-                 📊 Import Data
+                 📊 डेटा आयात | Import
                </button>
              </div>
            </div>
