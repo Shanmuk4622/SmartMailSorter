@@ -74,6 +74,17 @@ export const importCSVToDatabase = async (csvContent: string) => {
     }
     
     console.log(`✅ Successfully imported ${importData.length} records`);
+    
+    // Trigger data refresh event for components listening
+    window.dispatchEvent(new CustomEvent('csvDataImported', {
+      detail: { count: importData.length, totalProcessed: records.length }
+    }));
+    
+    // Also trigger a general refresh event
+    window.dispatchEvent(new CustomEvent('dataRefresh'));
+    
+    console.log('🔄 Triggered data refresh events for all components');
+    
     return data;
   } catch (err) {
     console.error('❌ Failed to import CSV data:', err);

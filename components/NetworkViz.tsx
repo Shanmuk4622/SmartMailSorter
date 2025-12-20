@@ -5,6 +5,8 @@ import { supabase } from '../supabaseClient';
 import { ScanResult, MailData } from '../types';
 import { sampleData, sortingCenterLocations } from '../sampleData';
 import { createPortal } from 'react-dom';
+import MapViz from './MapViz';
+import NetworkStatsPanel from './NetworkStatsPanel';
 
 interface NetworkNode extends d3.SimulationNodeDatum {
   id: string;
@@ -94,6 +96,7 @@ const NetworkViz: React.FC = () => {
   const [showTraffic, setShowTraffic] = useState(true);
   const [timeRange, setTimeRange] = useState<'1h'|'24h'|'7d'>('24h');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<'network' | 'map'>('network');
   
   // Layout controls
   const [chargeStrength, setChargeStrength] = useState<number>(-400);
@@ -302,8 +305,26 @@ const NetworkViz: React.FC = () => {
       })
       .subscribe();
 
+    // Listen for CSV import events
+    const handleCsvImport = () => {
+      console.log('🔄 CSV data imported detected, refreshing network visualization...');
+      setTimeout(() => {
+        fetchRealNetworkData();
+      }, 1000); // Delay to ensure database has time to process
+    };
+    
+    const handleDataRefresh = () => {
+      console.log('🔄 General data refresh triggered...');
+      fetchRealNetworkData();
+    };
+    
+    window.addEventListener('csvDataImported', handleCsvImport);
+    window.addEventListener('dataRefresh', handleDataRefresh);
+
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('csvDataImported', handleCsvImport);
+      window.removeEventListener('dataRefresh', handleDataRefresh);
     };
   }, []);
 
@@ -941,33 +962,113 @@ const NetworkViz: React.FC = () => {
            {/* Top Gradient Line */}
            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500"></div>
            
-           <div className="absolute top-4 left-4 z-10 pointer-events-none">
+           <div className="absolute top-4 left-4 z-10">
              <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
                <Database className="w-5 h-5 text-cyan-400" />
                MAIL PROCESSING NETWORK
              </h3>
              <p className="text-slate-400 text-xs font-mono mt-1">LIVE_DATA /// {networkStats.sortingCenters.filter(n => n.scanCount > 0).length}/{networkStats.sortingCenters.length} CENTERS_ACTIVE</p>
+             
+             <div className="flex gap-2 mt-3 pointer-events-auto">
+               <button
+                 onClick={() => setViewMode('network')}
+                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                   viewMode === 'network' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                 }`}
+               >
+                 Network View
+               </button>
+               <button
+                 onClick={() => setViewMode('map')}
+                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                   viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                 }`}
+               >
+                 Map View
+               </button>
+               <button
+                 onClick={() => (window as any).importCSVData?.()}
+                 className="px-3 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                 title="Import sample CSV data"
+               >
+                 📊 Import Data
+               </button>
+             </div>
            </div>
 
-           {/* Real-time Metrics Corner */}
+           {/* Simplified Top-right Indicators */}
            <div className="absolute top-4 right-4 z-10 flex flex-col gap-1">
-             <div className="bg-slate-900/80 backdrop-blur-sm px-2 py-1 rounded border border-slate-600 text-xs text-slate-200">
-               <Wifi className="w-3 h-3 inline mr-1 text-blue-400" />
-               {metrics.totalScans.toLocaleString()} scans
+             <div className="bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg border border-slate-600 text-xs text-slate-200">
+               <div className="flex items-center gap-2">
+                 <Wifi className="w-3 h-3 text-green-400" />
+                 <span className="text-green-300">LIVE</span>
+               </div>
              </div>
-             <div className="bg-slate-900/80 backdrop-blur-sm px-2 py-1 rounded border border-slate-600 text-xs text-slate-200">
-               ⚡ {metrics.avgProcessingTime}ms avg
-             </div>
-             <div className="bg-slate-900/80 backdrop-blur-sm px-2 py-1 rounded border border-slate-600 text-xs text-slate-200">
-               ✅ {(metrics.successRate * 100).toFixed(1)}% success
+             <div className="bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg border border-slate-600 text-xs text-slate-200">
+               <div className="flex items-center gap-2">
+                 <Clock className="w-3 h-3 text-blue-400" />
+                 <span className="text-blue-300">Real-time</span>
+               </div>
              </div>
            </div>
            
-           {/* Graph Container */}
-           <div ref={containerRef} className={`w-full cursor-move bg-gradient-to-b from-slate-900/50 via-slate-950 to-black ${isExpanded ? 'h-[calc(100vh-200px)]' : 'h-[500px]'}`}>
-             <svg ref={svgRef} className="w-full h-full"></svg>
+           {/* Dynamic View Container with bottom padding for panels */}
+           {viewMode === 'network' ? (
+             <div ref={containerRef} className={`w-full cursor-move bg-gradient-to-b from-slate-900/50 via-slate-950 to-black ${isExpanded ? 'h-[calc(100vh-320px)]' : 'h-[380px]'} mb-24`}>
+               <svg ref={svgRef} className="w-full h-full"></svg>
+             </div>
+           ) : (
+             <div className={`w-full bg-slate-900 rounded-lg overflow-hidden ${isExpanded ? 'h-[calc(100vh-320px)]' : 'h-[380px]'} mb-24`}>
+               <MapViz />
+             </div>
+           )}
+           
+           {/* Testing Panel - Bottom-right */}
+           <div className="absolute bottom-4 right-4 z-20">
+             <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-2xl p-4 border border-purple-500/30 backdrop-blur-sm w-64">
+               <div className="flex items-center gap-3 mb-3">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-purple-400">
+                   <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5h0c-1.4 0-2.5-1.1-2.5-2.5V2"></path>
+                   <path d="M8.5 2h7"></path>
+                   <path d="M14.5 16h-5"></path>
+                 </svg>
+                 <h4 className="text-sm font-semibold text-white">Real-time Testing</h4>
+               </div>
+               <div className="flex flex-col gap-2">
+                 <button 
+                   onClick={() => (window as any).importCSVData?.()}
+                   className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-medium w-full"
+                 >
+                   <Database className="w-3 h-3" />
+                   Load Sample Data
+                 </button>
+                 <button 
+                   onClick={() => {
+                     // Simulate a new scan
+                     window.dispatchEvent(new CustomEvent('testScanAdded', {
+                       detail: { center: 'TEST-' + Date.now(), scans: Math.floor(Math.random() * 50) + 1 }
+                     }));
+                     fetchRealNetworkData();
+                   }}
+                   className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-xs font-medium w-full"
+                 >
+                   <Activity className="w-3 h-3" />
+                   Add Test Scan
+                 </button>
+               </div>
+               <p className="text-slate-400 text-xs mt-2">Test real-time updates and data visualization</p>
+             </div>
            </div>
 
+           {/* Network Stats Panel - Moved to bottom-left */}
+           <div className="absolute bottom-4 left-4 z-20">
+             <NetworkStatsPanel 
+               metrics={metrics}
+               sortingCenters={networkStats.sortingCenters}
+               isExpanded={isExpanded}
+             />
+           </div>
+           
            {/* Enhanced Legend */}
            <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-700 space-y-2">
              <div className="text-xs font-bold text-slate-300 mb-2">NODE STATUS</div>

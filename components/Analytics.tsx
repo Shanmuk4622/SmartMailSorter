@@ -257,17 +257,33 @@ const Analytics: React.FC = () => {
       {/* CSV Import Section */}
       <div className="bg-white p-6 rounded-lg shadow-sm border">
         <h3 className="text-lg font-semibold mb-4">Data Management</h3>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => (window as any).importCSVData?.()}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-          >
-            <TrendingUp className="w-4 h-4" />
-            Import CSV Data
-          </button>
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => (window as any).importCSVData?.()}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors duration-200"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Import CSV Data
+            </button>
+            <button
+              onClick={fetchAnalytics}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors duration-200"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Refresh Analytics
+            </button>
+          </div>
           <p className="text-sm text-gray-500">
-            Import rich data from the CSV export to enhance visualizations
+            Import rich data from the CSV export (20 sample records) to enhance visualizations with real geographic data from India and USA.
           </p>
+          {analytics.totalScans > 0 && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800">
+                ✅ Data loaded successfully! You now have <strong>{analytics.totalScans}</strong> scans across <strong>{analytics.uniqueCenters}</strong> sorting centers.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

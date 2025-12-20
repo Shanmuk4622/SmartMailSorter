@@ -1,0 +1,21 @@
+timestamp,recipient,address,pin_code,city,state,country,sorting_center_id,sorting_center_name,confidence,original_text
+2025-12-19T10:30:00Z,Rajesh Kumar,15/234 MG Road Jaipur Rajasthan,302001,Jaipur,RJ,India,JPR-SC-302,Jaipur Sorting Center,95,राजेश कुमार 15/234 एमजी रोड जयपुर
+2025-12-19T10:35:00Z,Priya Sharma,42 Linking Road Mumbai Maharashtra,400050,Mumbai,MH,India,MAA_SC,Mumbai Processing Center,92,प्रिया शर्मा 42 लिंकिंग रोड मुंबई
+2025-12-19T10:40:00Z,Arjun Singh,234 Anna Salai Chennai Tamil Nadu,600001,Chennai,TN,India,HUB-302,Chennai Mail Hub,88,अर्जुन सिंह 234 अन्ना सलाई चेन्नई
+2025-12-19T10:45:00Z,Sunita Devi,678 Connaught Place New Delhi,110001,Delhi,DL,India,DEL-MAIN,Delhi Main Processing Center,97,सुनीता देवी 678 कनॉट प्लेस नई दिल्ली
+2025-12-19T10:50:00Z,Michael Johnson,1234 Main Street Zeeland MI USA,49464,Zeeland,MI,USA,USPS-MI-494,USPS Michigan Facility,93,Michael Johnson 1234 Main Street Zeeland MI
+2025-12-19T10:55:00Z,Ravi Patel,890 MG Road Ahmedabad Gujarat,380001,Ahmedabad,GJ,India,AMD-HUB,Ahmedabad Mail Hub,91,रवि पटेल 890 एमजी रोड अहमदाबाद
+2025-12-19T11:00:00Z,Sarah Williams,5678 Oak Avenue Lincoln NE USA,68501,Lincoln,NE,USA,LINCOLN_NE_PDC,Lincoln Processing & Distribution Center,89,Sarah Williams 5678 Oak Avenue Lincoln NE
+2025-12-19T11:05:00Z,Deepak Verma,456 Brigade Road Bangalore Karnataka,560001,Bangalore,KA,India,BLR-TECH,Bangalore Technology Hub,94,दीपक वर्मा 456 ब्रिगेड रोड बैंगलोर
+2025-12-19T11:10:00Z,Anita Reddy,789 Tank Bund Road Hyderabad Telangana,500001,Hyderabad,TG,India,HYD-MAIN,Hyderabad Main Center,90,अनीता रेड्डी 789 टैंक बंड रोड हैदराबाद
+2025-12-19T11:15:00Z,Vikram Gupta,321 Park Street Kolkata West Bengal,700016,Kolkata,WB,India,KOL-EAST,Kolkata Eastern Hub,87,विक्रम गुप्ता 321 पार्क स्ट्रीट कोलकाता
+2025-12-19T11:20:00Z,Kavya Nair,555 MG Road Kochi Kerala,682001,Kochi,KL,India,COK-PORT,Kochi Port Mail Center,85,कव्या नायर 555 एमजी रोड कोच्चि
+2025-12-19T11:25:00Z,Robert Davis,9876 Elm Street Portland OR USA,97201,Portland,OR,USA,USPS-OR-972,USPS Oregon Facility,92,Robert Davis 9876 Elm Street Portland OR
+2025-12-19T11:30:00Z,Meera Joshi,777 FC Road Pune Maharashtra,411001,Pune,MH,India,PUN-TECH,Pune Technology Park,88,मीरा जोशी 777 एफसी रोड पुणे
+2025-12-19T11:35:00Z,Amit Kumar,888 Civil Lines Lucknow Uttar Pradesh,226001,Lucknow,UP,India,LKO-MAIN,Lucknow Main Processing,86,अमित कुमार 888 सिविल लाइन्स लखनऊ
+2025-12-19T11:40:00Z,Jessica Taylor,4321 Pine Street Seattle WA USA,98101,Seattle,WA,USA,USPS-WA-981,USPS Washington Facility,90,Jessica Taylor 4321 Pine Street Seattle WA
+2025-12-19T11:45:00Z,Rahul Sharma,999 Station Road Bhopal Madhya Pradesh,462001,Bhopal,MP,India,BHO-CENT,Bhopal Central Hub,83,राहुल शर्मा 999 स्टेशन रोड भोपाल
+2025-12-19T11:50:00Z,Lakshmi Iyer,111 Temple Street Madurai Tamil Nadu,625001,Madurai,TN,India,MDU-TEMP,Madurai Temple District,89,लक्ष्मी अय्यर 111 टेम्पल स्ट्रीट मदुरै
+2025-12-19T11:55:00Z,Kevin Anderson,2468 Broadway New York NY USA,10001,New York,NY,USA,USPS-NY-100,USPS New York Central,94,Kevin Anderson 2468 Broadway New York NY
+2025-12-19T12:00:00Z,Sanjay Jain,222 Commercial Street Mysore Karnataka,570001,Mysore,KA,India,MYS-PALACE,Mysore Palace District,81,संजय जैन 222 कॉमर्शियल स्ट्रीट मैसूर
+2025-12-19T12:05:00Z,Emily Brown,1357 Valley Road Phoenix AZ USA,85001,Phoenix,AZ,USA,USPS-AZ-850,USPS Arizona Facility,87,Emily Brown 1357 Valley Road Phoenix AZ
