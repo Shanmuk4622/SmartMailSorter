@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User, BarChart3, FileText, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, ScanLine, History, Share2, Mail, Menu, Bell, User, BarChart3, FileText, TrendingUp, Map } from 'lucide-react';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
 import NetworkViz from './components/NetworkViz';
+import MapViz from './components/MapViz';
 import Analytics from './components/Analytics';
 import NotificationCenter from './components/NotificationCenter';
 import BulkProcessor from './components/BulkProcessor';
@@ -80,7 +81,7 @@ const App: React.FC = () => {
 
           <div className="ml-auto">
             <button
-              aria-pressed={isCompactSidebar}
+              aria-pressed={isCompactSidebar ? "true" : "false"}
               aria-label={isCompactSidebar ? 'Expand sidebar' : 'Compact sidebar'}
               title={isCompactSidebar ? 'Expand sidebar' : 'Compact sidebar'}
               onClick={() => setIsCompactSidebar(s => !s)}
@@ -110,7 +111,16 @@ const App: React.FC = () => {
             description="Topology & Status"
             color="bg-green-600"
             compact={isCompactSidebar}
-          />
+          /> 
+          <NavButton 
+            active={currentView === AppView.MAP} 
+            onClick={() => { setCurrentView(AppView.MAP); setIsMobileMenuOpen(false); }} 
+            icon={<Map className="w-5 h-5" />}
+            label="मानचित्र | Live Map"
+            description="Geographic View"
+            color="bg-emerald-600"
+            compact={isCompactSidebar}
+          /> 
           <NavButton 
             active={currentView === AppView.SCANNER} 
             onClick={() => { setCurrentView(AppView.SCANNER); setIsMobileMenuOpen(false); }}
@@ -230,7 +240,8 @@ const App: React.FC = () => {
           <div className="w-full max-w-full mx-0 h-full flex flex-col">
             <div className="flex-1 animate-fade-in">
               {currentView === AppView.DASHBOARD && <Dashboard history={history} />}
-              {currentView === AppView.NETWORK && <NetworkViz />}
+              {currentView === AppView.NETWORK && <NetworkViz scanHistory={history} />}
+              {currentView === AppView.MAP && <MapViz scanHistory={history} />}
               {currentView === AppView.SCANNER && <Scanner onScanComplete={handleScanComplete} />}
               {currentView === AppView.HISTORY && <HistoryLog history={history} />}
               {currentView === AppView.ANALYTICS && <Analytics />}

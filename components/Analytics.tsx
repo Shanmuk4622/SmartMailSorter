@@ -275,7 +275,7 @@ const Analytics: React.FC = () => {
             </button>
           </div>
           <p className="text-sm text-gray-500">
-            Import rich data from the CSV export (20 sample records) to enhance visualizations with real geographic data from India and USA.
+            Import rich data from the CSV export (20 sample records) to enhance visualizations with real geographic data from Indian postal centers.
           </p>
           {analytics.totalScans > 0 && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
