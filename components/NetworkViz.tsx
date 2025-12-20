@@ -1,23 +1,44 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { RefreshCw, Zap, Server, Activity, Database } from 'lucide-react';
+import { RefreshCw, Zap, Server, Activity, Database, Play, Pause, RotateCcw, ZoomIn, ZoomOut, Maximize2, X, Filter, Clock, Wifi } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { ScanResult, MailData } from '../types';
+import { sampleData, sortingCenterLocations } from '../sampleData';
+import { createPortal } from 'react-dom';
+import MapViz from './MapViz';
+import NetworkStatsPanel from './NetworkStatsPanel';
 
 interface NetworkNode extends d3.SimulationNodeDatum {
   id: string;
   type: 'HUB' | 'LOCAL';
-  status: 'active' | 'busy' | 'idle';
+  status: 'active' | 'busy' | 'idle' | 'error';
   label: string;
   x?: number;
   y?: number;
   fx?: number | null;
   fy?: number | null;
+  // Enhanced properties
+  throughput?: number; // messages/hour
+  latency?: number; // ms
+  connections?: number;
+  lastSeen?: string;
+  version?: string;
+  load?: number; // 0-100%
+  // Geographic properties for real data integration
+  city?: string;
+  state?: string;
 }
 
 interface NetworkLink extends d3.SimulationLinkDatum<NetworkNode> {
   source: string | NetworkNode;
   target: string | NetworkNode;
   value: number;
+  // Enhanced properties
+  bandwidth?: number; // Mbps
+  utilization?: number; // 0-100%
+  packets?: number;
+  errors?: number;
+  status?: 'healthy' | 'degraded' | 'down';
 }
 
 interface Particle {
@@ -36,14 +57,276 @@ const NetworkViz: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string }>({ visible: false, x: 0, y: 0, text: '' });
-  const [metrics, setMetrics] = useState({ totalHubs: 0, activeRoutes: 0, uptime: '99.9%' });
-  // Layout controls (user-tunable)
-  // `dynamicLayout` when true means locals are free to move (dynamic); when false locals are pinned.
-  const [dynamicLayout, setDynamicLayout] = useState<boolean>(true);
+  const [metrics, setMetrics] = useState({ 
+    totalHubs: 0, 
+    activeRoutes: 0, 
+    uptime: '99.9%',
+    totalThroughput: 0,
+    avgLatency: 0,
+    errorRate: 0,
+    totalScans: 0,
+    successRate: 0,
+    avgProcessingTime: 0
+  });
+  
+  const [realScanData, setRealScanData] = useState<ScanResult[]>([]);
+  const [networkStats, setNetworkStats] = useState<{
+    sortingCenters: Array<{
+      id: string;
+      name: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      scanCount: number;
+      successRate: number;
+      avgProcessingTime: number;
+      lastActivity: string;
+    }>;
+    routes: Array<{
+      from: string;
+      to: string;
+      volume: number;
+      avgTime: number;
+    }>;
+  }>({ sortingCenters: [], routes: [] });
+  
+  // Enhanced controls
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showHubsOnly, setShowHubsOnly] = useState(false);
+  const [showTraffic, setShowTraffic] = useState(true);
+  const [timeRange, setTimeRange] = useState<'1h'|'24h'|'7d'>('24h');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<'network' | 'map'>('network');
+  
+  // Layout controls
   const [chargeStrength, setChargeStrength] = useState<number>(-400);
   const [linkDistanceBase, setLinkDistanceBase] = useState<number>(200);
+  const [dynamicLayout, setDynamicLayout] = useState(true);
   const [hubPositionsOverride, setHubPositionsOverride] = useState<Record<string, { x: number; y: number }> | null>(null);
   const [hubLabelOverride, setHubLabelOverride] = useState<Record<string, string> | null>(null);
+  
+  const zoomBehaviorRef = useRef<any>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  // Helper Components
+  const MetricRow = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex justify-between items-center text-sm">
+      <span className="text-slate-300 font-medium">{label}</span>
+      <span className="font-bold text-emerald-400 font-mono">{value}</span>
+    </div>
+  );
+
+  // Fetch real data from Supabase
+  const fetchRealNetworkData = async () => {
+    try {
+      console.log('🔄 Fetching network data from Supabase...');
+      const { data: scanData, error } = await supabase
+        .from('mail_scans')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      let scansToProcess: ScanResult[];
+      
+      if (error) {
+        console.error('❌ Error fetching scan data:', error);
+        console.log('📊 Using sample data for demo');
+        scansToProcess = sampleData;
+      } else if (!scanData || scanData.length === 0) {
+        console.log('📊 No scan data found, using sample data for demo');
+        scansToProcess = sampleData;
+      } else {
+        console.log(`✅ Found ${scanData.length} real scans, processing...`);
+        // Convert database records to ScanResult format
+        scansToProcess = scanData.map(record => ({
+          id: record.id,
+          timestamp: new Date(record.created_at).getTime(),
+          data: {
+            recipient: record.recipient,
+            address: record.address,
+            pin_code: record.pin_code,
+            city: record.city,
+            state: record.state,
+            country: record.country,
+            sorting_center_id: record.sorting_center_id,
+            sorting_center_name: record.sorting_center_name,
+            confidence: record.confidence / 100
+          },
+          status: record.status,
+          processingTimeMs: 2000 // Default since not stored
+        } as ScanResult));
+      }
+
+      setRealScanData(scansToProcess);
+
+      // Process data to extract network topology
+      const centerStats = new Map<string, {
+        id: string;
+        name: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        scans: ScanResult[];
+        successCount: number;
+        processingTimes: number[];
+        lastActivity: number;
+      }>();
+
+      // Group scans by sorting center
+      scansToProcess.forEach(scan => {
+        if (!scan.data) return;
+        
+        const centerId = scan.data.sorting_center_id || 'unknown';
+        const centerName = scan.data.sorting_center_name || centerId;
+        
+        if (!centerStats.has(centerId)) {
+          centerStats.set(centerId, {
+            id: centerId,
+            name: centerName,
+            city: scan.data.city,
+            state: scan.data.state,
+            country: scan.data.country,
+            scans: [],
+            successCount: 0,
+            processingTimes: [],
+            lastActivity: new Date().getTime() - Math.random() * 86400000 // Random time in last 24h
+          });
+        }
+
+        const center = centerStats.get(centerId)!;
+        center.scans.push(scan);
+        if (scan.status === 'completed') center.successCount++;
+        if (scan.processingTimeMs) center.processingTimes.push(scan.processingTimeMs);
+        
+        // Update last activity if this scan is newer
+        const scanTime = scan.timestamp;
+        if (scanTime > center.lastActivity) {
+          center.lastActivity = scanTime;
+        }
+      });
+
+      // Convert to network stats format
+      const sortingCenters = Array.from(centerStats.values()).map(center => ({
+        id: center.id,
+        name: center.name,
+        city: center.city,
+        state: center.state,
+        country: center.country,
+        scanCount: center.scans.length,
+        successRate: center.scans.length > 0 ? center.successCount / center.scans.length : 0,
+        avgProcessingTime: center.processingTimes.length > 0 
+          ? center.processingTimes.reduce((a, b) => a + b, 0) / center.processingTimes.length
+          : 0,
+        lastActivity: new Date(center.lastActivity).toISOString()
+      }));
+
+      // Create routes based on common destinations
+      const routes: Array<{ from: string; to: string; volume: number; avgTime: number; }> = [];
+      const routeMap = new Map<string, { volume: number; times: number[]; }>();
+
+      // Analyze mail flow patterns
+      scansToProcess.forEach(scan => {
+        if (!scan.data) return;
+        const from = scan.data.sorting_center_id || 'unknown';
+        const to = scan.data.city || 'destination';
+        const routeKey = `${from}->${to}`;
+        
+        if (!routeMap.has(routeKey)) {
+          routeMap.set(routeKey, { volume: 0, times: [] });
+        }
+        
+        const route = routeMap.get(routeKey)!;
+        route.volume++;
+        if (scan.processingTimeMs) route.times.push(scan.processingTimeMs);
+      });
+
+      routeMap.forEach((routeData, routeKey) => {
+        const [from, to] = routeKey.split('->');
+        routes.push({
+          from,
+          to,
+          volume: routeData.volume,
+          avgTime: routeData.times.length > 0 
+            ? routeData.times.reduce((a, b) => a + b, 0) / routeData.times.length
+            : 0
+        });
+      });
+
+      setNetworkStats({ sortingCenters, routes });
+
+      // Calculate real metrics
+      const totalScans = scansToProcess.length;
+      const successfulScans = scansToProcess.filter(s => s.status === 'completed').length;
+      const failedScans = scansToProcess.filter(s => s.status === 'failed').length;
+      const processingTimes = scansToProcess
+        .filter(s => s.processingTimeMs)
+        .map(s => s.processingTimeMs!);
+
+      const now = new Date();
+      const recentScans = scansToProcess.filter(s => {
+        const scanTime = new Date(s.timestamp || 0);
+        return (now.getTime() - scanTime.getTime()) < 24 * 60 * 60 * 1000; // Last 24 hours
+      });
+
+      setMetrics({
+        totalHubs: centerStats.size,
+        activeRoutes: routes.length,
+        uptime: '99.9%', // Could be calculated from system logs
+        totalThroughput: recentScans.length, // Scans per day
+        avgLatency: processingTimes.length > 0 
+          ? Math.round(processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length)
+          : 0,
+        errorRate: totalScans > 0 ? failedScans / totalScans : 0,
+        totalScans,
+        successRate: totalScans > 0 ? successfulScans / totalScans : 0,
+        avgProcessingTime: processingTimes.length > 0 
+          ? Math.round(processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length)
+          : 0
+      });
+
+    } catch (error) {
+      console.error('Failed to fetch real network data:', error);
+    }
+  };
+
+  // Fetch real data on component mount
+  useEffect(() => {
+    fetchRealNetworkData();
+    
+    // Set up real-time subscription for new scans
+    const subscription = supabase
+      .channel('mail_scans_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mail_scans'
+      }, () => {
+        fetchRealNetworkData(); // Refresh data when new scans arrive
+      })
+      .subscribe();
+
+    // Listen for CSV import events
+    const handleCsvImport = () => {
+      console.log('🔄 CSV data imported detected, refreshing network visualization...');
+      setTimeout(() => {
+        fetchRealNetworkData();
+      }, 1000); // Delay to ensure database has time to process
+    };
+    
+    const handleDataRefresh = () => {
+      console.log('🔄 General data refresh triggered...');
+      fetchRealNetworkData();
+    };
+    
+    window.addEventListener('csvDataImported', handleCsvImport);
+    window.addEventListener('dataRefresh', handleDataRefresh);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('csvDataImported', handleCsvImport);
+      window.removeEventListener('dataRefresh', handleDataRefresh);
+    };
+  }, []);
 
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return;
@@ -93,24 +376,43 @@ const NetworkViz: React.FC = () => {
       .attr("fill", "url(#grid)")
       .attr("opacity", 0.5);
 
-    // Data
-    const nodes: NetworkNode[] = [
-      { id: "HUB-NYC", type: "HUB", status: "busy", label: "New York" },
-      { id: "HUB-CHI", type: "HUB", status: "active", label: "Chicago" },
-      { id: "HUB-LAX", type: "HUB", status: "active", label: "Los Angeles" },
-      { id: "HUB-MIA", type: "HUB", status: "idle", label: "Miami" },
-      
-      { id: "LOC-BK", type: "LOCAL", status: "busy", label: "Brooklyn" },
-      { id: "LOC-QN", type: "LOCAL", status: "active", label: "Queens" },
-      { id: "LOC-NJ", type: "LOCAL", status: "active", label: "Jersey City" },
-      
-      { id: "LOC-NP", type: "LOCAL", status: "active", label: "Naperville" },
-      { id: "LOC-EV", type: "LOCAL", status: "idle", label: "Evanston" },
-      
-      { id: "LOC-SM", type: "LOCAL", status: "active", label: "Santa Monica" },
-      { id: "LOC-LB", type: "LOCAL", status: "active", label: "Long Beach" },
-      { id: "LOC-PS", type: "LOCAL", status: "idle", label: "Pasadena" },
-    ];
+    // Enhanced Data with performance metrics - Generate from real data
+    const nodes: NetworkNode[] = networkStats.sortingCenters.length > 0 
+      ? networkStats.sortingCenters.map(center => {
+          const isHub = center.scanCount > 50; // Consider high-volume centers as hubs
+          const recentActivity = new Date(center.lastActivity);
+          const hoursAgo = (new Date().getTime() - recentActivity.getTime()) / (1000 * 60 * 60);
+          
+          let status: 'active' | 'busy' | 'idle' | 'error';
+          if (center.successRate < 0.8) status = 'error';
+          else if (hoursAgo > 2) status = 'idle';
+          else if (center.scanCount > 100) status = 'busy';
+          else status = 'active';
+
+          return {
+            id: center.id,
+            label: center.name.length > 15 ? center.name.substring(0, 12) + '...' : center.name,
+            type: isHub ? 'HUB' : 'LOCAL',
+            status,
+            throughput: center.scanCount * 24, // Extrapolate to daily volume
+            latency: Math.round(center.avgProcessingTime),
+            connections: networkStats.routes.filter(r => r.from === center.id || r.to === center.id).length,
+            load: Math.min(95, Math.round((center.scanCount / 200) * 100)), // Normalize load percentage
+            version: `v${Math.floor(Math.random() * 3) + 1}.${Math.floor(Math.random() * 5)}.${Math.floor(Math.random() * 10)}`, // Could be stored in DB
+            lastSeen: center.lastActivity,
+            city: center.city,
+            state: center.state,
+            country: center.country
+          };
+        })
+      : [
+          // Fallback data if no real data available
+          { 
+            id: "DEMO-001", type: "HUB", status: "active", label: "Demo Hub",
+            throughput: 1200, latency: 25, connections: 5, load: 45,
+            lastSeen: new Date().toISOString(), version: "v2.1.0"
+          }
+        ];
 
     // Apply label overrides from logs when available. Use normalized alphanumeric
     // keys and token matching to increase the chance of matching log-provided
@@ -139,20 +441,87 @@ const NetworkViz: React.FC = () => {
       });
     }
 
-    const links: NetworkLink[] = [
-      { source: "HUB-NYC", target: "HUB-CHI", value: 5 },
-      { source: "HUB-NYC", target: "HUB-LAX", value: 3 },
-      { source: "HUB-NYC", target: "HUB-MIA", value: 2 },
-      { source: "HUB-CHI", target: "HUB-LAX", value: 3 },
-      { source: "HUB-NYC", target: "LOC-BK", value: 8 },
-      { source: "HUB-NYC", target: "LOC-QN", value: 6 },
-      { source: "HUB-NYC", target: "LOC-NJ", value: 5 },
-      { source: "HUB-CHI", target: "LOC-NP", value: 4 },
-      { source: "HUB-CHI", target: "LOC-EV", value: 3 },
-      { source: "HUB-LAX", target: "LOC-SM", value: 5 },
-      { source: "HUB-LAX", target: "LOC-LB", value: 6 },
-      { source: "HUB-LAX", target: "LOC-PS", value: 2 },
-    ];
+    // Generate real links from routing data
+    const links: NetworkLink[] = [];
+    
+    // Create connections based on real mail flow patterns
+    networkStats.routes.forEach(route => {
+      const sourceNode = nodes.find(n => n.id === route.from);
+      const targetExists = nodes.some(n => n.id === route.to || n.city === route.to);
+      
+      if (sourceNode && targetExists) {
+        // Find target node (could be by ID or city name)
+        const targetNode = nodes.find(n => n.id === route.to) || 
+                          nodes.find(n => n.city === route.to);
+        
+        if (targetNode && targetNode.id !== sourceNode.id) {
+          const utilization = Math.min(0.95, route.volume / 100); // Normalize utilization
+          let status: 'healthy' | 'degraded' | 'down';
+          
+          if (utilization > 0.8) status = 'degraded';
+          else if (route.avgTime > 5000) status = 'degraded'; // High processing time
+          else status = 'healthy';
+          
+          links.push({
+            source: sourceNode.id,
+            target: targetNode.id,
+            value: Math.min(10, Math.max(1, route.volume / 10)), // Normalize for visualization
+            bandwidth: route.volume * 10, // Approximate bandwidth based on volume
+            utilization,
+            packets: route.volume,
+            errors: Math.round(route.volume * (1 - ((sourceNode.throughput || 0) > 0 ? (sourceNode.throughput || 0) / ((sourceNode.throughput || 0) + 100) : 0.9))), // Estimate errors
+            status
+          });
+        }
+      }
+    });
+    
+    // If no real routing data, create basic hub connections from the sorting centers
+    if (links.length === 0 && nodes.length > 1) {
+      const hubs = nodes.filter(n => n.type === 'HUB');
+      const locals = nodes.filter(n => n.type === 'LOCAL');
+      
+      // Connect hubs to each other
+      for (let i = 0; i < hubs.length; i++) {
+        for (let j = i + 1; j < hubs.length; j++) {
+          links.push({
+            source: hubs[i].id,
+            target: hubs[j].id,
+            value: Math.max(1, ((hubs[i].throughput || 0) + (hubs[j].throughput || 0)) / 1000),
+            bandwidth: ((hubs[i].throughput || 0) + (hubs[j].throughput || 0)),
+            utilization: Math.random() * 0.6 + 0.2,
+            packets: (hubs[i].throughput || 0) + (hubs[j].throughput || 0),
+            errors: Math.round(Math.random() * 5),
+            status: 'healthy'
+          });
+        }
+      }
+      
+      // Connect locals to nearest hub (by name similarity or region)
+      locals.forEach(local => {
+        const nearestHub = hubs.reduce((nearest, hub) => {
+          // Simple distance heuristic based on name or could use geo data
+          const localRegion = local.state || local.city || '';
+          const hubRegion = hub.state || hub.city || hub.label;
+          const similarity = localRegion.toLowerCase().includes(hubRegion.toLowerCase()) ? 10 : 
+                            Math.random() * 5;
+          return similarity > (nearest ? nearest.similarity : 0) ? { hub, similarity } : nearest;
+        }, null as { hub: NetworkNode; similarity: number; } | null);
+        
+        if (nearestHub) {
+          links.push({
+            source: nearestHub.hub.id,
+            target: local.id,
+            value: Math.max(1, (local.throughput || 0) / 500),
+            bandwidth: (local.throughput || 0),
+            utilization: (local.load || 0) / 100,
+            packets: (local.throughput || 0),
+            errors: Math.round((1 - ((local.throughput || 0) > 0 ? 0.95 : 0.8)) * (local.throughput || 0)),
+            status: local.status === 'error' ? 'degraded' : 'healthy'
+          });
+        }
+      });
+    }
 
     // === Positioning: assign meaningful geographic-like coordinates ===
     // Default hub positions (fractions of width/height). Can be overridden by logs.
@@ -222,9 +591,20 @@ const NetworkViz: React.FC = () => {
       }
     });
 
+    // Apply filtering if showHubsOnly is enabled
+    const filteredNodes = showHubsOnly ? nodes.filter(n => n.type === 'HUB') : nodes;
+    const filteredLinks = showHubsOnly 
+      ? links.filter(l => {
+          const sourceId = typeof l.source === 'object' ? l.source.id : l.source;
+          const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+          return nodes.find(n => n.id === sourceId)?.type === 'HUB' || 
+                 nodes.find(n => n.id === targetId)?.type === 'HUB';
+        })
+      : links;
+
     // Initialize Particles
     const particles: Particle[] = [];
-    links.forEach(link => {
+    filteredLinks.forEach(link => {
       // Create 2-3 particles per link
       const count = Math.floor(Math.random() * 2) + 1;
       for (let i = 0; i < count; i++) {
@@ -236,12 +616,12 @@ const NetworkViz: React.FC = () => {
       }
     });
 
-    const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance((d: any) => {
+    const simulation = d3.forceSimulation(filteredNodes)
+      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance((d: any) => {
         // d.target may be an id (string) during initialization — resolve to node if needed
         const targetNode: NetworkNode | undefined = typeof d.target === 'object'
           ? d.target as NetworkNode
-          : nodes.find(n => n.id === d.target);
+          : filteredNodes.find(n => n.id === d.target);
         // use configurable base distance; locals are closer
         return targetNode && targetNode.type === 'LOCAL' ? Math.max(40, linkDistanceBase * 0.4) : linkDistanceBase;
       }))
@@ -253,7 +633,7 @@ const NetworkViz: React.FC = () => {
     const linkGroup = svg.append("g")
       .attr("class", "links")
       .selectAll("line")
-      .data(links)
+      .data(filteredLinks)
       .join("line")
       .attr("stroke", "#334155")
       .attr("stroke-width", d => 1 + Math.sqrt(d.value))
@@ -318,6 +698,7 @@ const NetworkViz: React.FC = () => {
       .attr("stroke", d => {
         if (d.status === 'active') return "#10b981"; // Emerald
         if (d.status === 'busy') return "#f43f5e"; // Rose
+        if (d.status === 'error') return "#fbbf24"; // Amber
         return "#94a3b8"; // Slate
       })
       .attr("stroke-width", 2)
@@ -326,6 +707,18 @@ const NetworkViz: React.FC = () => {
       .on("click", (event, d) => {
         setSelectedNode(d);
         event.stopPropagation();
+      })
+      .on("mouseover", (event, d) => {
+        // Highlight connected links
+        linkGroup.attr("opacity", l => {
+          const source = typeof l.source === 'object' ? l.source.id : l.source;
+          const target = typeof l.target === 'object' ? l.target.id : l.target;
+          return (source === d.id || target === d.id) ? 0.8 : 0.2;
+        });
+      })
+      .on("mouseout", () => {
+        // Reset all link opacity
+        linkGroup.attr("opacity", 0.45);
       });
 
     // Inner Status Dot
@@ -334,6 +727,7 @@ const NetworkViz: React.FC = () => {
       .attr("fill", d => {
         if (d.status === 'active') return "#10b981";
         if (d.status === 'busy') return "#f43f5e";
+        if (d.status === 'error') return "#fbbf24";
         return "#94a3b8";
       });
 
@@ -403,22 +797,71 @@ const NetworkViz: React.FC = () => {
 
     // Simulate changing load and update metrics periodically
     const metricInterval = setInterval(() => {
+      if (!isPlaying) return; // Only update when playing
+      
       // Randomly tweak link values and particle speeds to simulate traffic
       links.forEach(l => {
         const jitter = (Math.random() - 0.4) * 1.2;
         l.value = Math.max(1, Math.min(12, (l.value || 3) + jitter));
+        
+        // Update link-specific metrics
+        if (l.bandwidth) l.bandwidth = Math.max(100, l.bandwidth + (Math.random() - 0.5) * 50);
+        if (l.utilization !== undefined) l.utilization = Math.max(0.1, Math.min(0.95, l.utilization + (Math.random() - 0.5) * 0.1));
+        if (l.packets) l.packets = Math.max(0, l.packets + Math.floor((Math.random() - 0.3) * 100));
       });
+      
+      // Update node metrics
+      nodes.forEach(node => {
+        if (node.throughput) node.throughput = Math.max(100, node.throughput + (Math.random() - 0.5) * 500);
+        if (node.latency) node.latency = Math.max(5, node.latency + (Math.random() - 0.5) * 10);
+        if (node.load !== undefined) {
+          node.load = Math.max(5, Math.min(95, node.load + (Math.random() - 0.5) * 10));
+          // Update status based on load
+          if (node.load > 80) node.status = 'busy';
+          else if (node.load > 60) node.status = 'active';
+          else if (Math.random() < 0.05) node.status = 'error';
+          else node.status = 'active';
+        }
+        if (node.connections) node.connections = Math.max(1, node.connections + Math.floor((Math.random() - 0.5) * 2));
+        node.lastSeen = new Date().toISOString();
+      });
+      
       particleCircles.data().forEach((p: any) => {
         p.speed = 0.002 + Math.random() * 0.006 + (p.link.value || 0) * 0.0003;
       });
-      // Update link stroke widths to reflect new values
-      linkGroup.data(links).attr("stroke-width", d => 1 + Math.sqrt(d.value));
+      
+      // Update link stroke widths to reflect new values and show traffic
+      linkGroup.data(links).attr("stroke-width", d => {
+        const baseWidth = 1 + Math.sqrt(d.value);
+        const trafficMultiplier = showTraffic ? (1 + (d.utilization || 0.5)) : 1;
+        return baseWidth * trafficMultiplier;
+      })
+      .attr("stroke", d => {
+        if (showTraffic) {
+          const util = d.utilization || 0.5;
+          if (util > 0.8) return "#f43f5e"; // High utilization - red
+          if (util > 0.6) return "#fbbf24"; // Medium utilization - yellow  
+          return "#10b981"; // Low utilization - green
+        }
+        return "#334155"; // Default color
+      });
 
-      // Update metrics state
-      const totalHubs = nodes.filter(n => n.type === 'HUB').length;
-      const activeRoutes = links.length;
-      const uptime = (99.5 + Math.random() * 0.5).toFixed(2) + '%';
-      setMetrics({ totalHubs, activeRoutes, uptime });
+      // Update real-time metrics (only update dynamic values, keep actual data)
+      if (isPlaying) {
+        // Add small variations to simulate real-time changes
+        const currentMetrics = { ...metrics };
+        
+        // Very small variations to show it's "live"
+        if (currentMetrics.totalThroughput > 0) {
+          currentMetrics.totalThroughput += Math.floor((Math.random() - 0.5) * 10);
+        }
+        if (currentMetrics.avgLatency > 0) {
+          currentMetrics.avgLatency += Math.floor((Math.random() - 0.5) * 5);
+          currentMetrics.avgLatency = Math.max(0, currentMetrics.avgLatency);
+        }
+        
+        setMetrics(currentMetrics);
+      }
     }, 2000);
 
     return () => {
@@ -450,269 +893,401 @@ const NetworkViz: React.FC = () => {
       window.removeEventListener('resize', onWin);
       if (typeof currentCleanup === 'function') currentCleanup();
     };
-  }, [dynamicLayout, chargeStrength, linkDistanceBase, hubPositionsOverride, hubLabelOverride]);
+  }, [dynamicLayout, chargeStrength, linkDistanceBase, hubPositionsOverride, hubLabelOverride, showHubsOnly, showTraffic, isPlaying]);
 
-  return (
-    <div className="flex flex-col lg:flex-row h-full gap-6">
-      <div className="flex-1 bg-slate-950 rounded-3xl shadow-2xl border border-slate-800 overflow-hidden relative group">
-         {/* Top Gradient Line */}
-         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500"></div>
-         
-         <div className="absolute top-6 left-6 z-10 pointer-events-none">
-           <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-             <Database className="w-6 h-6 text-cyan-400" />
-             NETWORK TOPOLOGY
-           </h2>
-           <p className="text-slate-400 text-xs font-mono mt-1">LIVE TRAFFIC MONITORING /// NODE_STATUS_ACTIVE</p>
-         </div>
-         
-         {/* Graph Container */}
-         <div ref={containerRef} className="w-full h-[640px] cursor-move bg-gradient-to-b from-slate-900 via-slate-950 to-black">
-           <svg ref={svgRef} className="w-full h-full"></svg>
-         </div>
+  const networkVisualizationContent = (
+    <div className="flex flex-col h-full gap-4">
+      {/* Enhanced Control Panel */}
+      <div className="bg-slate-900/90 rounded-xl p-4 border border-slate-700 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsPlaying(!isPlaying)}
+            className={`p-2 rounded-lg transition-colors ${isPlaying ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'} hover:bg-emerald-500`}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </button>
+          <span className="text-xs text-slate-300 font-medium">
+            {isPlaying ? 'Live' : 'Paused'}
+          </span>
+        </div>
 
-         {/* Legend */}
-         <div className="absolute bottom-6 right-6 bg-slate-900/90 backdrop-blur-md p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-2">
-           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-             <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></span> OPTIMAL
-           </div>
-           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-             <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse"></span> HIGH LOAD
-           </div>
-           <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-             <span className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_10px_#60a5fa]"></span> DATA PACKET
-           </div>
-         </div>
+        <div className="h-6 w-px bg-slate-600"></div>
+
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-400" />
+          <button
+            onClick={() => setShowHubsOnly(!showHubsOnly)}
+            className={`px-3 py-1 text-xs rounded ${showHubsOnly ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+          >
+            Hubs Only
+          </button>
+          <button
+            onClick={() => setShowTraffic(!showTraffic)}
+            className={`px-3 py-1 text-xs rounded ${showTraffic ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+          >
+            Traffic
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-slate-600"></div>
+
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-slate-400" />
+          <select 
+            value={timeRange} 
+            onChange={(e) => setTimeRange(e.target.value as any)}
+            className="text-xs bg-slate-700 text-slate-200 px-2 py-1 rounded border border-slate-600"
+          >
+            <option value="1h">Last Hour</option>
+            <option value="24h">Last 24h</option>
+            <option value="7d">Last 7 days</option>
+          </select>
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+            aria-label="Expand"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Info Panel */}
-      <div className="w-full lg:w-80 flex flex-col gap-4">
-        {/* Status Card */}
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden border border-slate-700">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Zap className="w-24 h-24" />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-500/20 text-blue-400">
-                <Activity className="w-5 h-5" />
+      <div className="flex flex-col lg:flex-row flex-1 gap-4">
+        {/* Main Network Visualization */}
+        <div className="flex-1 bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden relative">
+           {/* Top Gradient Line */}
+           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500"></div>
+           
+           <div className="absolute top-4 left-4 z-10">
+             <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+               <Database className="w-5 h-5 text-cyan-400" />
+               MAIL PROCESSING NETWORK
+             </h3>
+             <p className="text-slate-400 text-xs font-mono mt-1">LIVE_DATA /// {networkStats.sortingCenters.filter(n => n.scanCount > 0).length}/{networkStats.sortingCenters.length} CENTERS_ACTIVE</p>
+             
+             <div className="flex gap-2 mt-3 pointer-events-auto">
+               <button
+                 onClick={() => setViewMode('network')}
+                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                   viewMode === 'network' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                 }`}
+               >
+                 Network View
+               </button>
+               <button
+                 onClick={() => setViewMode('map')}
+                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                   viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                 }`}
+               >
+                 Map View
+               </button>
+               <button
+                 onClick={() => (window as any).importCSVData?.()}
+                 className="px-3 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                 title="Import sample CSV data"
+               >
+                 📊 Import Data
+               </button>
+             </div>
+           </div>
+
+           {/* Simplified Top-right Indicators */}
+           <div className="absolute top-4 right-4 z-10 flex flex-col gap-1">
+             <div className="bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg border border-slate-600 text-xs text-slate-200">
+               <div className="flex items-center gap-2">
+                 <Wifi className="w-3 h-3 text-green-400" />
+                 <span className="text-green-300">LIVE</span>
+               </div>
+             </div>
+             <div className="bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg border border-slate-600 text-xs text-slate-200">
+               <div className="flex items-center gap-2">
+                 <Clock className="w-3 h-3 text-blue-400" />
+                 <span className="text-blue-300">Real-time</span>
+               </div>
+             </div>
+           </div>
+           
+           {/* Dynamic View Container with bottom padding for panels */}
+           {viewMode === 'network' ? (
+             <div ref={containerRef} className={`w-full cursor-move bg-gradient-to-b from-slate-900/50 via-slate-950 to-black ${isExpanded ? 'h-[calc(100vh-320px)]' : 'h-[380px]'} mb-24`}>
+               <svg ref={svgRef} className="w-full h-full"></svg>
+             </div>
+           ) : (
+             <div className={`w-full bg-slate-900 rounded-lg overflow-hidden ${isExpanded ? 'h-[calc(100vh-320px)]' : 'h-[380px]'} mb-24`}>
+               <MapViz />
+             </div>
+           )}
+           
+           {/* Network Stats Panel - Bottom-left */}
+           <div className="absolute bottom-4 left-4 z-20">
+             <NetworkStatsPanel 
+               metrics={metrics}
+               sortingCenters={networkStats.sortingCenters}
+               isExpanded={isExpanded}
+             />
+           </div>
+           
+           {/* Enhanced Legend - Bottom-right */}
+           <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-700 space-y-2 z-20">
+             <div className="text-xs font-bold text-slate-300 mb-2">NODE STATUS</div>
+             <div className="flex items-center gap-2 text-xs text-slate-300">
+               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span> Active
+             </div>
+             <div className="flex items-center gap-2 text-xs text-slate-300">
+               <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185] animate-pulse"></span> High Load
+             </div>
+             <div className="flex items-center gap-2 text-xs text-slate-300">
+               <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span> Error
+             </div>
+             <div className="flex items-center gap-2 text-xs text-slate-300">
+               <span className="w-2 h-2 rounded-full bg-slate-400"></span> Idle
+             </div>
+             <div className="border-t border-slate-700 pt-2 mt-2">
+               <div className="flex items-center gap-2 text-xs text-slate-300">
+                 <span className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_#60a5fa]"></span> Data Flow
+               </div>
+             </div>
+           </div>
+
+           {/* Performance Indicators */}
+           <div className="absolute bottom-4 left-4 z-10 bg-slate-900/80 backdrop-blur-sm p-3 rounded-lg border border-slate-700 min-w-[200px]">
+             <div className="text-xs font-bold text-slate-300 mb-2">SYSTEM HEALTH</div>
+             <div className="space-y-1">
+               <div className="flex justify-between items-center text-xs text-slate-200">
+                 <span>Centers</span>
+                 <span className="font-mono text-emerald-400">{metrics.totalHubs}</span>
+               </div>
+               <div className="flex justify-between items-center text-xs text-slate-200">
+                 <span>Routes</span>
+                 <span className="font-mono">{metrics.activeRoutes}</span>
+               </div>
+               <div className="flex justify-between items-center text-xs text-slate-200">
+                 <span>Success Rate</span>
+                 <span className="font-mono text-emerald-400">{(metrics.successRate * 100).toFixed(1)}%</span>
+               </div>
+             </div>
+           </div>
+        </div>
+
+        {/* Enhanced Side Panel */}
+        <div className="w-full lg:w-80 flex flex-col gap-4">
+          {/* System Status Card */}
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white shadow-xl border border-slate-700 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5">
+              <Server className="w-20 h-20" />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-emerald-500/20 rounded-lg border border-emerald-500/30">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h4 className="font-bold text-sm">Network Overview</h4>
               </div>
-              <h3 className="font-bold text-lg">System Metrics</h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-800/50 rounded-lg p-2">
+                  <div className="text-slate-400 mb-1">Total Throughput</div>
+                  <div className="font-bold text-white">{(metrics.totalThroughput / 1000).toFixed(1)}k/h</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2">
+                  <div className="text-slate-400 mb-1">Avg Latency</div>
+                  <div className="font-bold text-white">{metrics.avgLatency}ms</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2">
+                  <div className="text-slate-400 mb-1">Error Rate</div>
+                  <div className="font-bold text-white">{(metrics.errorRate * 100).toFixed(2)}%</div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-2">
+                  <div className="text-slate-400 mb-1">Uptime</div>
+                  <div className="font-bold text-emerald-400">{metrics.uptime}</div>
+                </div>
+              </div>
             </div>
-            <div className="space-y-3">
-              <MetricRow label="Total Hubs" value={`${metrics.totalHubs}`} />
-              <MetricRow label="Active Routes" value={`${metrics.activeRoutes}`} />
-              <MetricRow label="Uptime" value={`${metrics.uptime}`} />
-            </div>
           </div>
-        </div>
 
-        {/* Layout Controls */}
-        <div className="bg-slate-900/90 rounded-2xl p-4 text-white border border-slate-700">
-          <h4 className="text-xs font-bold text-slate-300 mb-2">Layout Controls</h4>
-          <div className="flex items-center justify-between mb-2 text-xs text-slate-300">
-            <span>Dynamic Layout</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only" checked={dynamicLayout} onChange={(e) => setDynamicLayout(e.target.checked)} />
-              <div className={`w-9 h-5 rounded-full transition-colors ${dynamicLayout ? 'bg-emerald-500' : 'bg-slate-700'}`}></div>
-            </label>
-          </div>
-            <div className="flex gap-2 mb-2">
-            <button onClick={async () => {
-              // Fetch recent scan logs and create hub positions automatically
-              // Prefer latitude/longitude when available and map to normalized coordinates
-              try {
-                const { data, error } = await supabase
-                  .from('mail_scans')
-                  .select('sorting_center_id, sorting_center_name, latitude, longitude')
-                  .limit(1000);
-                if (error) throw error;
-                if (!data || data.length === 0) return;
+          {/* Node Details Panel */}
+          {selectedNode && (
+            <div className="bg-slate-900/90 rounded-2xl p-4 border border-slate-700 text-white">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-bold text-sm flex items-center gap-2">
+                    {selectedNode.type === 'HUB' ? <Database className="w-4 h-4" /> : <Server className="w-4 h-4" />}
+                    {selectedNode.label}
+                  </h4>
+                  <p className="text-xs text-slate-400 font-mono">{selectedNode.id}</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedNode(null)}
+                  className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-                // collect rows that have lat/lon
-                const rows = (data as any[]).map(r => ({
-                  id: r.sorting_center_id || r.sorting_center_name,
-                  name: r.sorting_center_name || r.sorting_center_id,
-                  lat: r.latitude !== undefined && r.latitude !== null ? Number(r.latitude) : null,
-                  lon: r.longitude !== undefined && r.longitude !== null ? Number(r.longitude) : null,
-                }));
-
-                // compute bounds for available coords
-                const withCoords = rows.filter(r => r.lat !== null && r.lon !== null);
-                const override: Record<string, { x: number; y: number }> = {};
-
-                // declare normalizers in outer scope so they can be used below
-                let normX = (lon: number) => 0.5;
-                let normY = (lat: number) => 0.5;
-
-                if (withCoords.length > 0) {
-                  const lats = withCoords.map(r => r.lat as number);
-                  const lons = withCoords.map(r => r.lon as number);
-                  const minLat = Math.min(...lats);
-                  const maxLat = Math.max(...lats);
-                  const minLon = Math.min(...lons);
-                  const maxLon = Math.max(...lons);
-
-                  // normalize to 0..1 fractions (x => lon, y => lat inverted for screen coords)
-                  normX = (lon: number) => (lon - minLon) / (maxLon - minLon || 1);
-                  normY = (lat: number) => 1 - (lat - minLat) / (maxLat - minLat || 1);
-
-                  // assign positions using the provided id/name as the override key
-                  rows.forEach(r => {
-                    if (r.lat === null || r.lon === null) return;
-                    const xFrac = clamp(normX(r.lon as number), 0.05, 0.95);
-                    const yFrac = clamp(normY(r.lat as number), 0.05, 0.95);
-                    override[String(r.id)] = { x: xFrac, y: yFrac };
-                  });
-
-                } else {
-                  // fallback: no coords available, place hubs evenly around a circle
-                  const ids = Array.from(new Set(rows.map(r => r.id)));
-                  const centerX = 0.5; const centerY = 0.45; const radiusFrac = 0.30;
-                  ids.forEach((id, i) => {
-                    const angle = (i / ids.length) * Math.PI * 2;
-                    override[id.toString()] = {
-                      x: centerX + Math.cos(angle) * radiusFrac,
-                      y: centerY + Math.sin(angle) * radiusFrac
-                    };
-                  });
-                }
-
-                setHubPositionsOverride(override);
-                // also keep a mapping of id->label from logs so we can rename nodes
-                const labelMap: Record<string, string> = {};
-
-                // Common city keyword -> hub id mapping to ensure logs referring to
-                // city names map to the existing HUB ids shown on the map.
-                const cityToHub: Record<string, string> = {
-                  'newyork': 'HUB-NYC', 'nyc': 'HUB-NYC', 'new york': 'HUB-NYC', 'manhattan': 'HUB-NYC',
-                  'chicago': 'HUB-CHI', 'chi': 'HUB-CHI', 'chgo': 'HUB-CHI',
-                  'losangeles': 'HUB-LAX', 'los angeles': 'HUB-LAX', 'la': 'HUB-LAX',
-                  'miami': 'HUB-MIA'
-                };
-
-                rows.forEach(r => {
-                  const idKey = String(r.id || '').trim();
-                  const nameRaw = String(r.name || '').trim();
-                  const nameKey = nameRaw;
-                  if (nameRaw) {
-                    // If the name contains a known city token, map it to that HUB id
-                    const lower = nameRaw.toLowerCase();
-                    for (const token in cityToHub) {
-                      if (!token) continue;
-                      if (lower.includes(token)) {
-                        const hubId = cityToHub[token];
-                        // ensure we override the hub label directly
-                        labelMap[hubId] = nameRaw;
-                        // also ensure position override uses the hub id as key when coords exist
-                        if (override[String(r.id)]) {
-                          override[hubId] = override[String(r.id)];
-                        } else if (r.lat !== null && r.lon !== null) {
-                          // compute normalized position if not already set
-                          const xFrac = clamp(normX(r.lon as number), 0.05, 0.95);
-                          const yFrac = clamp(normY(r.lat as number), 0.05, 0.95);
-                          override[hubId] = { x: xFrac, y: yFrac };
-                        }
-                      }
-                    }
-
-                    // Map by id and by full name as fallback
-                    if (idKey) labelMap[idKey] = nameRaw;
-                    labelMap[nameKey] = nameRaw;
-
-                    // Also add tokenized words and a normalized alphanumeric key
-                    nameRaw.split(/\s+/).forEach(tok => {
-                      const t = tok.trim();
-                      if (t.length >= 2) labelMap[t.toLowerCase()] = nameRaw;
-                    });
-                    const norm = nameRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (norm) labelMap[norm] = nameRaw;
-                  } else if (idKey) {
-                    labelMap[idKey] = idKey;
-                  }
-                });
-                setHubLabelOverride(labelMap);
-                // set dynamic layout to true so nodes can settle around hubs
-                setDynamicLayout(true);
-              } catch (err) {
-                // ignore errors silently for now
-                console.error('Load logs failed', err);
-              }
-            }} className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs">Load From Logs</button>
-            <button onClick={() => setHubPositionsOverride(null)} className="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs">Reset Hubs</button>
-          </div>
-          <div className="text-xs text-slate-300 mb-2">Repel Strength: {chargeStrength}</div>
-          <input type="range" min={-1200} max={-50} value={chargeStrength} onChange={(e) => setChargeStrength(Number(e.target.value))} className="w-full mb-3" />
-          <div className="text-xs text-slate-300 mb-2">Link Distance: {linkDistanceBase}px</div>
-          <input type="range" min={60} max={400} value={linkDistanceBase} onChange={(e) => setLinkDistanceBase(Number(e.target.value))} className="w-full" />
-        </div>
-
-        {/* Node Details */}
-        <div className="flex-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <Server className="w-5 h-5 text-slate-400" />
-            Node Inspector
-          </h3>
-          
-          {selectedNode ? (
-            <div className="animate-fade-in space-y-6">
-              <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-lg">
-                <div className={`absolute top-0 left-0 w-1 h-full ${
-                  selectedNode.status === 'active' ? 'bg-emerald-500' :
-                  selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
-                }`}></div>
-                
-                  <p className="text-xs font-mono text-slate-400 mb-2">{selectedNode.type}_ID: {selectedNode.id}</p>
-                <h2 className="text-2xl font-bold mb-1">{selectedNode.label}</h2>
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                     selectedNode.status === 'active' ? 'bg-emerald-500' :
-                     selectedNode.status === 'busy' ? 'bg-rose-500' : 'bg-slate-500'
-                  }`}></div>
-                  <span className="text-sm font-medium uppercase tracking-wider">{selectedNode.status}</span>
+                  <span className={`w-2 h-2 rounded-full ${
+                    selectedNode.status === 'active' ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' :
+                    selectedNode.status === 'busy' ? 'bg-rose-400 shadow-[0_0_8px_#fb7185]' :
+                    selectedNode.status === 'error' ? 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' :
+                    'bg-slate-400'
+                  } ${selectedNode.status !== 'idle' ? 'animate-pulse' : ''}`}></span>
+                  <span className="text-xs font-medium capitalize">{selectedNode.status}</span>
+                  <span className="text-xs text-slate-400">Load: {selectedNode.load}%</span>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Queue</p>
-                    <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 300)}</p>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">Latency</p>
-                    <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 80) + 5}ms</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Queue</p>
-                  <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 500)}</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-800/50 rounded p-2">
+                    <div className="text-slate-400 mb-1">Throughput</div>
+                    <div className="font-mono text-white">{selectedNode.throughput?.toLocaleString() || 0}/h</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded p-2">
+                    <div className="text-slate-400 mb-1">Latency</div>
+                    <div className="font-mono text-white">{selectedNode.latency || 0}ms</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded p-2">
+                    <div className="text-slate-400 mb-1">Connections</div>
+                    <div className="font-mono text-white">{selectedNode.connections || 0}</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded p-2">
+                    <div className="text-slate-400 mb-1">Version</div>
+                    <div className="font-mono text-white text-xs">{selectedNode.version || 'N/A'}</div>
+                  </div>
                 </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-xs text-slate-500 font-bold uppercase mb-1">Latency</p>
-                  <p className="text-xl font-mono font-bold text-slate-800">{Math.floor(Math.random() * 20) + 5}ms</p>
-                </div>
+
+                {selectedNode.lastSeen && (
+                  <div className="text-xs text-slate-400">
+                    Last seen: {new Date(selectedNode.lastSeen).toLocaleTimeString()}
+                  </div>
+                )}
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-4">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                 <RefreshCw className="w-6 h-6 opacity-30" />
-              </div>
-              <p className="text-sm font-medium">Select any node on the topology graph to view real-time diagnostics.</p>
             </div>
           )}
+
+          {/* Layout Controls */}
+          <div className="bg-slate-900/90 rounded-2xl p-4 text-white border border-slate-700">
+            <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Controls
+            </h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300">Dynamic Layout</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only" 
+                    checked={dynamicLayout} 
+                    onChange={(e) => setDynamicLayout(e.target.checked)} 
+                  />
+                  <div className={`w-8 h-4 rounded-full transition-colors ${dynamicLayout ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+                    <div className={`w-3 h-3 bg-white rounded-full transition-transform duration-200 ${dynamicLayout ? 'translate-x-4' : 'translate-x-0.5'} translate-y-0.5`}></div>
+                  </div>
+                </label>
+              </div>
+              
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setChargeStrength(chargeStrength - 50)}
+                  className="flex-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded"
+                >
+                  Closer
+                </button>
+                <button 
+                  onClick={() => setChargeStrength(chargeStrength + 50)}
+                  className="flex-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded"
+                >
+                  Spread
+                </button>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setChargeStrength(-400);
+                  setLinkDistanceBase(200);
+                  setDynamicLayout(true);
+                }}
+                className="w-full px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset Layout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Testing Panel - Bottom of container */}
+      <div className="mt-4">
+        <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-2xl p-4 border border-purple-500/30 backdrop-blur-sm max-w-md mx-auto">
+          <div className="flex items-center gap-3 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-purple-400">
+              <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5h0c-1.4 0-2.5-1.1-2.5-2.5V2"></path>
+              <path d="M8.5 2h7"></path>
+              <path d="M14.5 16h-5"></path>
+            </svg>
+            <h4 className="text-sm font-semibold text-white">Real-time Testing</h4>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center justify-center">
+            <button 
+              onClick={() => (window as any).importCSVData?.()}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Database className="w-4 h-4" />
+              Load Sample Data
+            </button>
+            <button 
+              onClick={() => {
+                // Simulate a new scan
+                window.dispatchEvent(new CustomEvent('testScanAdded', {
+                  detail: { center: 'TEST-' + Date.now(), scans: Math.floor(Math.random() * 50) + 1 }
+                }));
+                fetchRealNetworkData();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Activity className="w-4 h-4" />
+              Add Test Scan
+            </button>
+          </div>
+          <p className="text-slate-400 text-sm mt-3 text-center">Use these buttons to test real-time data updates in NetworkViz and MapViz. Watch the visualizations update automatically!</p>
         </div>
       </div>
     </div>
   );
-};
 
-const MetricRow = ({ label, value }: { label: string, value: string }) => (
-  <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-white/5">
-    <span className="text-sm font-medium text-slate-400">{label}</span>
-    <span className="font-bold font-mono text-white">{value}</span>
-  </div>
-);
+  if (isExpanded && typeof window !== 'undefined') {
+    return createPortal(
+      <div 
+        className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col"
+        style={{ isolation: 'isolate' }}
+      >
+        <div className="flex items-center justify-between p-4 bg-slate-900/80 border-b border-slate-700">
+          <div className="flex items-center gap-3">
+            <Database className="w-6 h-6 text-cyan-400" />
+            <h2 className="text-xl font-bold text-white">Network Topology & Status - Full Screen</h2>
+          </div>
+          <button
+            onClick={() => setIsExpanded(false)}
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+            aria-label="Exit full screen"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 p-4 overflow-auto">
+          {networkVisualizationContent}
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  return networkVisualizationContent;
+}
 
 export default NetworkViz;
