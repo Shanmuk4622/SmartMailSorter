@@ -275,6 +275,16 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
         status: 'completed',
         processingTimeMs: Date.now() - start
       };
+      
+      console.log('✅ Scan completed at:', new Date(scanResult.timestamp).toLocaleString('en-IN', { 
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }));
 
       // Save complete scan result to Supabase using individual columns
       const { data: dbData, error: dbError } = await supabase

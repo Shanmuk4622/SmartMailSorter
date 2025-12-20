@@ -9,8 +9,32 @@ interface AdvancedAnalyticsProps {
 const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ scanHistory }) => {
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
   const [selectedMetric, setSelectedMetric] = useState<'volume' | 'accuracy' | 'speed'>('volume');
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [realTimeMetrics, setRealTimeMetrics] = useState({
+    totalScans: 0,
+    avgAccuracy: 0,
+    avgSpeed: 0,
+    errorRate: 0
+  });
 
-  // Generate comprehensive analytics data
+  // Update analytics when scan history changes
+  useEffect(() => {
+    const data = generateAnalyticsData();
+    setPerformanceData(data);
+    
+    // Calculate real-time metrics
+    if (scanHistory.length > 0) {
+      const totalScans = scanHistory.length;
+      const avgAccuracy = Math.round(scanHistory.reduce((sum, scan) => sum + (scan.data?.confidence || 0), 0) / totalScans);
+      const avgSpeed = Math.round(scanHistory.reduce((sum, scan) => sum + (scan.processingTimeMs || 1200), 0) / totalScans);
+      const errorScans = scanHistory.filter(scan => scan.status === 'error' || (scan.data?.confidence || 0) < 50).length;
+      const errorRate = Math.round((errorScans / totalScans) * 100);
+      
+      setRealTimeMetrics({ totalScans, avgAccuracy, avgSpeed, errorRate });
+    }
+  }, [scanHistory, timeRange]);
+
+  // Generate comprehensive analytics data from actual scan history
   const generateAnalyticsData = () => {
     const now = new Date();
     const timeRanges = {
@@ -19,67 +43,124 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ scanHistory }) =>
       '30d': Array.from({ length: 30 }, (_, i) => new Date(now.getTime() - (29 - i) * 24 * 60 * 60 * 1000))
     };
 
-    return timeRanges[timeRange].map(date => ({
-      time: timeRange === '24h' ? date.getHours() + ':00' : date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-      volume: Math.floor(Math.random() * 150 + 50),
-      accuracy: Math.floor(Math.random() * 15 + 85),
-      speed: Math.floor(Math.random() * 500 + 1200), // milliseconds
-      throughput: Math.floor(Math.random() * 300 + 200)
-    }));
+    return timeRanges[timeRange].map(date => {
+      const timeKey = timeRange === '24h' ? date.getHours() + ':00' : date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+      
+      // Filter scans for this time period
+      const relevantScans = scanHistory.filter(scan => {
+        const scanDate = new Date(scan.timestamp);
+        if (timeRange === '24h') {
+          return scanDate.getHours() === date.getHours() && 
+                 scanDate.toDateString() === date.toDateString();
+        } else {
+          return scanDate.toDateString() === date.toDateString();
+        }
+      });
+      
+      const volume = relevantScans.length;
+      const accuracy = relevantScans.length > 0 
+        ? Math.round(relevantScans.reduce((sum, scan) => sum + (scan.data?.confidence || 0), 0) / relevantScans.length)
+        : 0;
+      const speed = relevantScans.length > 0
+        ? Math.round(relevantScans.reduce((sum, scan) => sum + (scan.processingTimeMs || 1200), 0) / relevantScans.length)
+        : 1200;
+      
+      return {
+        time: timeKey,
+        volume: volume,
+        accuracy: Math.max(accuracy, 0),
+        speed: speed,
+        throughput: volume * 10 // Approximate throughput metric
+      };
+    });
   };
 
-  const performanceData = generateAnalyticsData();
+  // PIN Code distribution from real scan data
+  const pinCodeData = React.useMemo(() => {
+    const pinStats = new Map<string, number>();
+    
+    scanHistory.forEach(scan => {
+      const pin = scan.data?.pin_code;
+      if (pin) {
+        const prefix = pin.substring(0, 3);
+        const area = pin.startsWith('400') ? 'Mumbai (400xxx)' :
+                    pin.startsWith('110') ? 'Delhi (110xxx)' :
+                    pin.startsWith('560') ? 'Bangalore (560xxx)' :
+                    pin.startsWith('600') ? 'Chennai (600xxx)' :
+                    pin.startsWith('201') ? 'Ghaziabad (201xxx)' :
+                    pin.startsWith('500') ? 'Hyderabad (500xxx)' :
+                    'Others';
+        
+        pinStats.set(area, (pinStats.get(area) || 0) + 1);
+      }
+    });
+    
+    const colors = ['#DC2626', '#16A34A', '#1D4ED8', '#EA580C', '#F59E0B', '#22C55E'];
+    const result = Array.from(pinStats.entries())
+      .map(([name, value], index) => ({ 
+        name, 
+        value, 
+        color: colors[index % colors.length] 
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+    
+    return result.length > 0 ? result : [
+      { name: 'No data yet', value: 1, color: '#cccccc' }
+    ];
+  }, [scanHistory]);
 
-  // PIN Code distribution
-  const pinCodeData = [
-    { name: 'Mumbai (400xxx)', value: 35, color: '#FF6600' },
-    { name: 'Delhi (110xxx)', value: 25, color: '#138808' },
-    { name: 'Bangalore (560xxx)', value: 20, color: '#000080' },
-    { name: 'Chennai (600xxx)', value: 12, color: '#FF9933' },
-    { name: 'Others', value: 8, color: '#cccccc' }
-  ];
-
-  // Processing efficiency metrics
+  // Processing efficiency metrics using real data
   const efficiencyMetrics = [
     {
       title: 'औसत सटीकता | Avg Accuracy',
-      value: '96.8%',
-      change: '+2.1%',
-      trend: 'up',
+      value: `${realTimeMetrics.avgAccuracy}%`,
+      change: scanHistory.length > 1 ? '+' + Math.abs(realTimeMetrics.avgAccuracy - 85) + '%' : 'N/A',
+      trend: realTimeMetrics.avgAccuracy >= 85 ? 'up' : 'down',
       icon: <Target className="w-5 h-5" />,
       color: 'text-[#138808]'
     },
     {
       title: 'प्रोसेसिंग गति | Avg Speed',
-      value: '1.2s',
-      change: '-0.3s',
-      trend: 'down',
+      value: `${(realTimeMetrics.avgSpeed / 1000).toFixed(1)}s`,
+      change: realTimeMetrics.avgSpeed < 2000 ? 'Fast' : 'Slow',
+      trend: realTimeMetrics.avgSpeed < 2000 ? 'up' : 'down',
       icon: <Zap className="w-5 h-5" />,
       color: 'text-[#FF6600]'
     },
     {
-      title: 'दैनिक थ्रूपुट | Daily Throughput',
-      value: '2,847',
-      change: '+14.2%',
+      title: 'कुल स्कैन | Total Scans',
+      value: realTimeMetrics.totalScans.toLocaleString(),
+      change: scanHistory.length > 0 ? `+${Math.min(realTimeMetrics.totalScans, 50)}` : 'N/A',
       trend: 'up',
       icon: <Activity className="w-5 h-5" />,
       color: 'text-[#000080]'
     },
     {
       title: 'त्रुटि दर | Error Rate',
-      value: '1.2%',
-      change: '-0.8%',
-      trend: 'down',
+      value: `${realTimeMetrics.errorRate}%`,
+      change: realTimeMetrics.errorRate < 5 ? 'Good' : 'High',
+      trend: realTimeMetrics.errorRate < 5 ? 'up' : 'down',
       icon: <Award className="w-5 h-5" />,
       color: 'text-emerald-600'
     }
   ];
 
-  // Peak hours analysis
-  const peakHoursData = Array.from({ length: 24 }, (_, hour) => ({
-    hour: hour.toString().padStart(2, '0') + ':00',
-    volume: Math.floor(Math.random() * 200 + (hour >= 9 && hour <= 17 ? 300 : 100))
-  }));
+  // Peak hours analysis from real scan data
+  const peakHoursData = React.useMemo(() => {
+    const hourStats = new Array(24).fill(0);
+    
+    scanHistory.forEach(scan => {
+      const scanDate = new Date(scan.timestamp);
+      const hour = scanDate.getHours();
+      hourStats[hour]++;
+    });
+    
+    return hourStats.map((volume, hour) => ({
+      hour: hour.toString().padStart(2, '0') + ':00',
+      volume
+    }));
+  }, [scanHistory]);
 
   return (
     <div className="space-y-6">

@@ -205,8 +205,16 @@ const Dashboard: React.FC<DashboardProps> = ({ history }) => {
                 history.slice().reverse().slice(0, 5).map((scan) => (
                   <tr key={scan.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-8 py-4">
-                      <div className="font-bold text-slate-800">{new Date(scan.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                      <div className="text-xs text-slate-400 font-medium">{new Date(scan.timestamp).toLocaleDateString()}</div>
+                      <div className="font-bold text-slate-800">{new Date(scan.timestamp).toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit', 
+                        minute: '2-digit'
+                      })}</div>
+                      <div className="text-xs text-slate-400 font-medium">{new Date(scan.timestamp).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        month: 'short',
+                        day: 'numeric'
+                      })}</div>
                     </td>
                     <td className="px-8 py-4 font-medium text-slate-700">{scan.data?.recipient || 'Unknown'}</td>
                     <td className="px-8 py-4 font-mono text-slate-600">

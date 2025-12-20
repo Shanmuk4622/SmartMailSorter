@@ -62,7 +62,15 @@ const HistoryLog: React.FC<HistoryLogProps> = ({ history }) => {
       ...sortedHistory.map(scan => {
         const data = scan.data;
         const row = [
-          `"${new Date(scan.timestamp).toLocaleString()}"`,
+          `"${new Date(scan.timestamp).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })}"`,
           `"${(data?.recipient || '').replace(/"/g, '""')}"`,
           `"${(data?.address || '').replace(/"/g, '""')}"`,
           `"${(data?.pin_code || '').replace(/"/g, '""')}"`,
@@ -217,10 +225,19 @@ const HistoryLog: React.FC<HistoryLogProps> = ({ history }) => {
                 <tr key={scan.id} className="hover:bg-amber-50/30 transition-colors group border-l-4 border-l-transparent hover:border-l-amber-500">
                   <td className="px-8 py-5 whitespace-nowrap">
                     <div className="font-bold text-slate-800">
-                      {new Date(scan.timestamp).toLocaleDateString()}
+                      {new Date(scan.timestamp).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
                     </div>
                     <div className="text-xs text-slate-400 font-bold uppercase tracking-wide mt-1">
-                      {new Date(scan.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      {new Date(scan.timestamp).toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit', 
+                        minute: '2-digit'
+                      })}
                     </div>
                   </td>
                   <td className="px-8 py-5">
