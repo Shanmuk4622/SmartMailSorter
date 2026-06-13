@@ -14,7 +14,7 @@ This project was built for a hackathon challenge inspired by Indian Post workflo
 ## Screenshots
 
 ![SmartMailSorter Screenshot 1](./image1.png)
-![SmartMailSorter Screenshot 2](./imge2.png)
+![SmartMailSorter Screenshot 2](./image2.png)
 ![SmartMailSorter Screenshot 3](./image3.png)
 ![SmartMailSorter Screenshot 4](./image4.png)
 
